@@ -298,6 +298,7 @@ const skills = {
         },
         async content(event, trigger, player) {
             await player.changeGroup("qun");
+            await player.addSkills("hfhy_pini");
             player.awakenSkill(event.name);
             player.changeSkin({ characterName: "kuang_zhonghui" }, "qun_kuang_zhonghui");
             const result = await player
@@ -643,9 +644,16 @@ const skills = {
         enable: "phaseUse",
         usable: 1,
         filter(event, player) {
-            return player.group == "qun";
+            // 势力限制：仅群势力可发动；同时要求存在可使用的普通锦囊，避免空发动
+            if (player.group != "qun") return false;
+            return get.inpileVCardList(info => {
+                if (info[0] !== "trick") return false;
+                return player.hasUseTarget(new lib.element.VCard({ name: info[2], nature: info[3], isCard: true }));
+            }).length > 0;
         },
         async content(event, trigger, player) {
+            // 硬性势力校验：防止任何路径绕过filter违规发动
+            if (player.group != "qun") return;
             // 先确认有可用的普通锦囊，避免支付代价后无牌可选
             const list = get.inpileVCardList(info => {
                 if (info[0] !== "trick") return false;
@@ -657,7 +665,8 @@ const skills = {
             if (hasMark) choices.push(["mark", "移去1枚【势】标记"]);
             const costResult = await player.chooseButton(["睥睨：请选择一项", [choices, "textbutton"]])
                 .set("ai", button => {
-                    return button.link === "mark" ? 2 : 1;
+                    if (button.link === "mark") return 3;
+                    return player.hp > 2 ? 2 : 0;
                 })
                 .forResult();
             if (!costResult.bool) return;
@@ -680,7 +689,10 @@ const skills = {
         ai: {
             order: 6,
             result: {
-                player: 1,
+                player(player) {
+                    if ((player.storage["hfhy_choufa"] || 0) >= 1) return 1.5;
+                    return player.hp > 2 ? 1 : 0;
+                },
             },
         },
         "skill_id": "hfhy_pini",
@@ -776,23 +788,25 @@ const skills = {
                         selectCard: -1,
                         viewAs,
                         popname: true,
-                        precontent() {
-                            "step 0"
+                        async precontent(event, trigger, player) {
                             const expansions = player.getExpansions("hfhy_jizi");
-                            if (!expansions.length) { event.finish(); return; }
+                            if (!expansions.length) return;
+                            let consume;
                             if (expansions.length === 1) {
-                                player.logSkill("hfhy_jizi");
-                                player.loseToDiscardpile(expansions[0]);
+                                consume = expansions[0];
                             } else {
-                                player.chooseButton(["选择消耗的「资」", [expansions, "card"]]).set("ai", button => {
-                                    return -get.value(button.link);
-                                });
+                                // 必须 forced：AI 的按钮打分为 -get.value(card)（几乎恒负），
+                                // 非强制时 AI 会取消选择，导致视为使用基本牌却不消耗「资」
+                                const result = await player.chooseButton(["选择消耗的「资」", [expansions, "card"]], true)
+                                    .set("ai", button => {
+                                        return -get.value(button.link);
+                                    })
+                                    .forResult();
+                                if (!result.bool || !result.links?.length) return;
+                                consume = result.links[0];
                             }
-                            "step 1"
-                            if (result.bool && result.links) {
-                                player.logSkill("hfhy_jizi");
-                                player.loseToDiscardpile(result.links[0]);
-                            }
+                            player.logSkill("hfhy_jizi");
+                            await player.loseToDiscardpile(consume);
                         },
                     };
                 },
@@ -1586,7 +1600,10 @@ groupSkill: "qun",
         return event.card && get.type(event.card, "basic") === "basic";
     },
     async content(event, trigger, player) {
-        const result = await player.chooseBool("是否发动【凿险】进行判定？").forResult();
+        // 判定零成本：方片得险标记（距离-1/破蜀弹药/急袭），红桃白得一张牌，AI无脑发动
+        const result = await player.chooseBool("是否发动【凿险】进行判定？")
+            .set("ai", () => true)
+            .forResult();
         if (!result.bool) return;
         const judgeEvent = player.judge(card => {
             if (get.suit(card) === "heart") return 1;
@@ -1654,15 +1671,29 @@ groupSkill: "qun",
                 "将一张方片手牌置于你的武将牌上"
             ])
             .set("prompt", "屯田：请选择一项")
+            .set("ai", () => {
+                // 选项一：有低价值红桃且弃牌堆有基本牌可换时优先
+                const cheapHeart = player.getCards("he").find(card => get.suit(card) == "heart" && get.value(card) < 4.5);
+                const basicsInPile = Array.from(ui.discardPile.childNodes).filter(c => get.type(c, "basic") === "basic").length;
+                if (cheapHeart && basicsInPile >= 2) return "选项一";
+                // 选项二：只舍得放低价值的方片手牌
+                const cheapDiamond = player.getCards("h").find(card => get.suit(card) == "diamond" && get.value(card) < 5.5);
+                if (cheapDiamond) return "选项二";
+                return "cancel2";
+            })
             .forResult();
-        
+
         if (control === "cancel2") return;
-        
+
         if (control === "选项一") {
             const result = await player
                 .chooseToDiscard([1, Infinity], "he", true)
                 .set("prompt", "弃置任意张红桃牌，从弃牌堆获得双倍数量的基本牌")
                 .set("filterCard", card => get.suit(card) === "heart")
+                .set("ai", card => {
+                    // 只弃低价值红桃（桃等关键牌保留），高价值红桃返回负分由强制兜底
+                    return get.value(card) < 4.5 ? 5 - get.value(card) : -1;
+                })
                 .forResult();
             if (!result.bool) return;
 
@@ -1687,7 +1718,10 @@ groupSkill: "qun",
                 true,
                 "请选择一张方片手牌置于武将牌上",
                 card => get.suit(card) === "diamond"
-            ).forResult();
+            ).set("ai", card => {
+                // 优先放价值最低的方片，险标记用于破蜀/急袭/减距离
+                return 6 - get.value(card);
+            }).forResult();
             if (result.bool && result.cards.length) {
                 const card = result.cards[0];
                 const next = player.addToExpansion(card, "gain2");
@@ -1740,7 +1774,15 @@ groupSkill: "qun",
         const x = player.countMark("hfhy_zaoxian");
         event.result = await player.chooseBool(
             `是否对${get.translation(target)}发动【破蜀】？减少1点体力上限并造成${x}点伤害`
-        ).forResult();
+        ).set("ai", () => {
+            // 限定技局势判断：只打敌人；体力上限过低不再扣；伤害足以击杀/重创时果断发动，伤害小则留到关键时刻
+            if (get.attitude(player, target) >= 0) return false;
+            if (player.maxHp <= 2) return false;
+            if (x >= target.hp) return true;           // 伤害≥目标体力，足以击杀
+            if (x >= 2 && target.hp <= 2) return true; // 重创濒死敌人
+            if (x >= 4) return true;                   // 高伤害直接打
+            return false;                              // 伤害太小，留作后手
+        }).forResult();
     },
     async content(event, trigger, player) {
         const target = trigger.player;
@@ -1794,7 +1836,11 @@ groupSkill: "qun",
     ai: {
         order: 5,
         result: {
-            player: 1,
+            player(player) {
+                // 险标记是破蜀的伤害弹药：标记≥2才舍得消耗急袭，仅剩1枚时留作爆发
+                if (player.countMark("hfhy_zaoxian") >= 2) return 1;
+                return 0;
+            },
         },
     },
 },
@@ -4141,6 +4187,10 @@ groupSkill: "qun",
 "hfhy_jikun": {
     audio: ["yuanhu1.mp3","twjuezhu1.mp3"],
     enable: "phaseUse",
+    usable: 1,
+    filter(event, player) {
+        return player.countCards("he") > 0;
+    },
     filterTarget(card, player, target) {
         return target != player;
     },
@@ -4154,7 +4204,7 @@ groupSkill: "qun",
         ).set("ai", function (card) {
             if (get.position(card) == "e") return -1;
             // 优先交低价值装备牌（触发目标回血并自动装备）
-            if (get.type(card) == "equip") return 6 - get.value(card);
+            if (get.type(card) == "equip") return 8 - get.value(card);
             // 没有装备牌时交价值最低的牌
             return -get.value(card);
         }).forResult();
@@ -4166,7 +4216,7 @@ groupSkill: "qun",
 
         if (get.type(card) == "equip" && target.getCards("h").includes(card)) {
             await target.recover();
-            target.chooseUseTarget(card);
+            await target.chooseUseTarget(card);
         }
     },
     ai: {
@@ -4181,8 +4231,14 @@ groupSkill: "qun",
                 return 0.5;
             },
             target(player, target) {
-                if (get.attitude(player, target) > 0) return 1;
-                return -1;
+                const att = get.attitude(player, target);
+                if (att <= 0) return -1;
+                let val = 1;
+                // 受伤队友优先（装备牌可触发回血）
+                if (target.isDamaged() && player.hasCard(card => get.type(card) == "equip", "h")) val += 1;
+                // 缺牌队友更需要资助
+                if (target.countCards("h") <= 2) val += 0.5;
+                return val;
             },
         },
     },
