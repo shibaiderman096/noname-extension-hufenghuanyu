@@ -24,29 +24,28 @@ const skills = {
         filter(event, player) {
             return player.countCards("h") > 0;
         },
-        content() {
-            "step 0"
-            player.chooseToDiscard("h", [1, player.countCards("h")], true);
-            "step 1"
-            if (result.bool) {
-                const X = result.cards.length;
-                const targets = game.filterPlayer(t => {
-                    if (t === player) return false;
-                    let dist = get.distance(player, t);
-                    for (const card of player.getVCards("e")) {
-                        const globalFrom = get.info(card)?.distance?.globalFrom;
-                        if (globalFrom) dist += globalFrom;
-                    }
-                    for (const card of t.getVCards("e")) {
-                        const globalTo = get.info(card)?.distance?.globalTo;
-                        if (globalTo) dist += globalTo;
-                    }
-                    return dist < X;
-                });
-                for (const target of targets) {
-                    player.useCard({ name: "sha", isCard: true }, target, false);
+        async content(event, trigger, player) {
+            const { bool, cards } = await player.chooseToDiscard("h", [1, player.countCards("h")], true)
+                .set("prompt", "突袭：弃置X张手牌，视为对所有与你距离小于X的角色使用一张【杀】")
+                .set("ai", card => 5 - get.value(card))
+                .forResult();
+            if (!bool || !cards?.length) return;
+            const X = cards.length;
+            // get.distance 已自动计入装备与技能的距离修正，无需手动累加
+            const targets = game.filterPlayer(target => {
+                return target !== player && get.distance(player, target) < X;
+            });
+            for (const target of targets) {
+                if (target.isIn()) {
+                    await player.useCard({ name: "sha", isCard: true }, target, false);
                 }
             }
+        },
+        ai: {
+            order: 4,
+            result: {
+                player: 1,
+            },
         },
         "skill_id": "hfhy_tuxi",
         "_priority": 0,
@@ -185,9 +184,34 @@ const skills = {
                 .set("ai", button => {
                     const player = get.player();
                     const phase = button.link;
-                    if (phase === "phaseDiscard" && player.needsToDiscard() > 2) return 3;
-                    if (phase === "phaseUse" && player.countCards("h") >= 3) return 2;
-                    if (phase === "phaseDraw") return 1;
+                    // 跳过弃牌阶段：需要弃的牌越多越划算
+                    if (phase === "phaseDiscard") {
+                        const num = player.needsToDiscard();
+                        return num > 1 ? Math.min(4, num) : 0;
+                    }
+                    // 跳过摸牌阶段：摸体力张牌、失去1点体力并获得咆哮
+                    if (phase === "phaseDraw") {
+                        if (player.hp <= 1) return 0;
+                        const extra = player.hp - 2;
+                        const hasSha = player.countCards("h", card => get.name(card, player) === "sha") > 0;
+                        if (extra <= 0 && (!hasSha || player.hp <= 2)) return 0;
+                        let val = 2 + extra + (hasSha ? 1 : 0);
+                        if (player.hp <= 2) val -= 3;
+                        return val;
+                    }
+                    // 跳过出牌阶段：手牌上限+体力并获得一次无距离限制的杀
+                    if (phase === "phaseUse") {
+                        if (player.hp <= 1) return 0;
+                        const hasEnemy = game.hasPlayer(cur => player.inRange(cur) && get.attitude(player, cur) < 0);
+                        if (!hasEnemy) return 0;
+                        const hand = player.countCards("h");
+                        const limit = player.getHandcardLimit ? player.getHandcardLimit() : player.hp;
+                        let val = 1.5;
+                        val += Math.min(3, Math.max(0, hand - limit));
+                        // 手牌充足时正常出牌通常更划算
+                        if (hand >= 4) val -= 1;
+                        return val;
+                    }
                     return 0;
                 })
                 .forResult();
@@ -207,7 +231,13 @@ const skills = {
                 case "phaseUse": {
                     player.storage.shanglv_handLimit = x;
                     player.addTempSkill("hfhy_shanglue_handLimit", "phaseAfter");
-                    const result = await player.chooseTarget((card, player, target) => player.inRange(target)).forResult();
+                    const result = await player
+                        .chooseTarget((card, player, target) => player.inRange(target), `对攻击范围内的一名角色使用【杀】（手牌上限+${x}）`)
+                        .set("ai", target => {
+                            const player = get.player();
+                            return get.effect(target, { name: "sha" }, player, player);
+                        })
+                        .forResult();
                     if (result.bool) {
                         await player.useCard(
                             { name: "sha", isCard: true },
@@ -585,11 +615,12 @@ const skills = {
             player: "damageEnd",
         },
         filter(event, player) {
-            return player.countCards("he") > 0 && (player.storage["hfhy_choufa"] || 0) >= 1;
+            return player.countCards("he") > 0;
         },
         async cost(event, trigger, player) {
             const result = await player.chooseToDiscard("he", 1)
-                .set("prompt", "是否弃置一张牌，将手牌摸至体力上限？")
+                .set("prompt", "是否弃置一张牌，将手牌摸至体力上限？若以此法获得的牌数小于2，你获得1枚【势】标记")
+                .set("ai", card => 5 - get.value(card))
                 .forResult();
             event.result = { bool: result?.bool };
         },
@@ -598,8 +629,8 @@ const skills = {
             if (num > 0) {
                 await player.draw(num);
             }
-            if (num >= 2 && player.storage["hfhy_choufa"] !== undefined) {
-                player.storage["hfhy_choufa"]--;
+            if (num < 2 && player.storage["hfhy_choufa"] !== undefined) {
+                player.storage["hfhy_choufa"]++;
                 player.markSkill("hfhy_choufa");
             }
         },
@@ -614,41 +645,43 @@ const skills = {
         filter(event, player) {
             return player.group == "qun";
         },
-        content() {
-            "step 0"
+        async content(event, trigger, player) {
+            // 先确认有可用的普通锦囊，避免支付代价后无牌可选
+            const list = get.inpileVCardList(info => {
+                if (info[0] !== "trick") return false;
+                return player.hasUseTarget(new lib.element.VCard({ name: info[2], nature: info[3], isCard: true }));
+            });
+            if (!list.length) return;
             const hasMark = (player.storage["hfhy_choufa"] || 0) >= 1;
             const choices = [["hp", "失去1点体力"]];
             if (hasMark) choices.push(["mark", "移去1枚【势】标记"]);
-            player.chooseButton(["请选择一项", [choices, "textbutton"]]);
-            "step 1"
-            if (result.bool) {
-                event.costType = result.links[0];
-            } else {
-                event.finish();
-            }
-            "step 2"
-            if (event.costType === "hp") {
-                player.loseHp();
+            const costResult = await player.chooseButton(["睥睨：请选择一项", [choices, "textbutton"]])
+                .set("ai", button => {
+                    return button.link === "mark" ? 2 : 1;
+                })
+                .forResult();
+            if (!costResult.bool) return;
+            if (costResult.links[0] === "hp") {
+                await player.loseHp();
+                if (!player.isIn()) return;
             } else {
                 player.storage["hfhy_choufa"]--;
                 player.markSkill("hfhy_choufa");
             }
-            const list = [];
-            for (const name of lib.inpile) {
-                const info = lib.card[name];
-                if (info.type === "trick" && !info.delay) {
-                    list.push(["锦囊", "", name]);
-                }
-            }
-            if (!list.length) { event.finish(); return; }
-            player.chooseButton([get.translation("hfhy_pini"), [list, "vcard"]]);
-            "step 3"
-            if (result.bool) {
-                const card = new lib.element.VCard({ name: result.links[0][2], isCard: true });
-                if (player.hasUseTarget(card)) {
-                    player.chooseUseTarget(card, true);
-                }
-            }
+            const trickResult = await player.chooseButton([get.translation("hfhy_pini"), [list, "vcard"]], true)
+                .set("ai", button => {
+                    return player.getUseValue(new lib.element.VCard({ name: button.link[2], nature: button.link[3], isCard: true }));
+                })
+                .forResult();
+            if (!trickResult.bool) return;
+            const card = new lib.element.VCard({ name: trickResult.links[0][2], nature: trickResult.links[0][3], isCard: true });
+            await player.chooseUseTarget(card, true);
+        },
+        ai: {
+            order: 6,
+            result: {
+                player: 1,
+            },
         },
         "skill_id": "hfhy_pini",
         "_priority": 0,
@@ -793,6 +826,12 @@ const skills = {
                 const result = await player
                     .chooseCard("h", [1, gainedCards.length], "是否将获得的牌置于武将牌上作为「资」？")
                     .set("filterCard", card => gainedCards.includes(card))
+                    .set("ai", card => {
+                        // 「资」之后只能被消耗来视为使用基本牌，低价值牌存起来最划算；好牌留在手里
+                        const val = get.value(card);
+                        if (val >= 6) return 0;
+                        return 6 - val;
+                    })
                     .forResult();
                 event.result = { bool: result?.bool, cost_data: result?.cards };
             },
@@ -835,7 +874,21 @@ groupSkill: "qun",
                 [expansions, "card"],
             ])
             .set("ai", button => {
-                return get.attitude(player, trigger.player);
+                const card = button.link;
+                const target = trigger.player;
+                // 对方是敌人时不给
+                if (get.attitude(player, target) <= 0) return 0;
+                // 「资」是集资/完杀/归汉的资源，按半价折算损失，优先给低价值的
+                let val = 2 - get.value(card) * 0.5;
+                // 对方能出杀（手上有杀，或也有「资」可视为杀）且杀得到共同敌人时收益更高
+                const canSha =
+                    target.countCards("h", { name: "sha" }) > 0 ||
+                    target.getExpansions("hfhy_jizi").length > 0;
+                if (canSha && game.hasPlayer(cur => target.canUse("sha", cur) && get.attitude(player, cur) < 0)) {
+                    val += 3;
+                }
+                // 否则基本是保底让自己摸两张牌
+                return val;
             })
             .forResult();
         event.result = { bool: result?.bool, cost_data: result?.links };
@@ -1094,15 +1147,21 @@ groupSkill: "qun",
     direct: true,
     async content(event, trigger, player) {
         const targetResult = await player.chooseTarget(get.prompt("hfhy_danqi"), (card, player, target) => target !== player)
-            .forResult();       
-        if (!targetResult.bool) return;       
+            .set("ai", target => {
+                const player = get.player();
+                if (get.attitude(player, target) >= 0) return 0;
+                return 1 + (target.countGainableCards(player, "hej") > 0 ? 1 : 0);
+            })
+            .forResult();
+        if (!targetResult.bool) return;
         const target = targetResult.targets[0];
-        const num = target.countGainableCards(player, "hej");       
+        const num = target.countGainableCards(player, "hej");
+        const canBeishui = player.maxHp > 1;
         const list = [];
         if (num > 0) list.push("选项一");
         list.push("选项二");
-        list.push("背水！");
-        
+        if (canBeishui) list.push("背水！");
+
         const controlResult = await player.chooseControl(list)
             .set("choiceList", [
                 `获得${get.translation(target)}区域内的一张牌`,
@@ -1111,9 +1170,9 @@ groupSkill: "qun",
             ])
             .set("prompt", get.prompt("hfhy_danqi", target))
             .set("ai", () => {
-                const t = _status.event.target;
-                const n = t.countGainableCards(get.player(), "hej");
-                if (n > 0 && t.hp <= 2) return "背水！";
+                const me = get.player();
+                const n = target.countGainableCards(me, "hej");
+                if (n > 0 && target.hp <= 2 && canBeishui) return "背水！";
                 if (n > 0) return "选项一";
                 return "选项二";
             })
@@ -2165,19 +2224,20 @@ groupSkill: "qun",
                     event.result = await player.chooseBool(
                         `是否交给${get.translation(target)}一张牌，令其恢复1点体力并获得"黄巾"标记？`
                     ).set("ai", () => {
-                        const player = _status.event.player;
-                        const target = _status.event.getTrigger().player;
                         const att = get.attitude(player, target);
-                        
-                        // 队友：倾向于救，但要保证自己不会因为给牌而陷入危险
-                        if (att > 0) {
-                            if (player.hp <= 1 && player.countCards("h") <= 1) return false;
-                            if (target.hp <= 1) return true;
-                            if (player.countCards("he", card => get.value(card) < 5) > 0) return true;
-                            return true;
+
+                        // 敌人不救
+                        if (att <= 0) return false;
+                        // 自保：自己血少且牌不足时留着闪/桃
+                        if (player.hp <= 1 && player.countCards("he") <= 2) return false;
+                        // 有低价值牌时果断救（回复1点体力+获得黄巾标记）
+                        let minVal = Infinity;
+                        for (const card of player.getCards("he")) {
+                            minVal = Math.min(minVal, get.value(card, player));
                         }
-                        // 敌人：通常不救
-                        return false;
+                        if (minVal <= 5) return true;
+                        // 只剩关键牌时，只有亲近队友（高态度）才值得交牌救
+                        return att >= 2;
                     }).forResult();
                 },
                 async content(event, trigger, player) {
@@ -2211,20 +2271,21 @@ groupSkill: "qun",
                 event.result = await target.chooseBool(
                     `是否交给${get.translation(player)}一张牌，获得"黄巾"标记？`
                 ).set("ai", () => {
-                    const target = _status.event.target; // 准备阶段开始的人（决策者）
-                    const player = _status.event.player; // 拥有布道的角色
+                    // 决策者 target：回合开始的角色；player：布道持有者（收牌的人）
                     const att = get.attitude(target, player);
-                    
-                    // 只有队友才愿意交牌换标记
-                    if (att > 0) {
-                        // 自己状态差时不交关键牌
-                        if (target.hp <= 1 && target.countCards("h") <= 1) return false;
-                        // 至少有低价值牌可交
-                        if (target.countCards("he", card => get.value(card) < 6) > 0) return true;
-                        return true; // 队友一般愿意交
+
+                    // 非队友不交牌
+                    if (att <= 0) return false;
+                    // 手牌紧张时保命，不为了标记交牌
+                    if (target.countCards("he") <= 1) return false;
+                    if (target.hp <= 1 && target.countCards("he") <= 2) return false;
+                    // 有可交的低价值牌才换标记；态度越高可接受的牌价值越高
+                    let minVal = Infinity;
+                    for (const card of target.getCards("he")) {
+                        minVal = Math.min(minVal, get.value(card, target));
                     }
-                    // 敌人不交
-                    return false;
+                    if (att >= 2) return minVal < 7;
+                    return minVal < 4;
                 }).forResult();
             },
             async content(event, trigger, player) {
@@ -2283,7 +2344,9 @@ groupSkill: "qun",
                         `选择至多${x}名其他角色`,
                         [1, Math.min(x, targets.length)],
                         (card2, player2, target) => targets.includes(target)
-                    ).forResult();
+                    ).set("ai", target => {
+                        return get.effect(target, { name: "sha", nature: "thunder" }, player, player);
+                    }).forResult();
                     if (chooseResult.bool) {
                         for (const target of chooseResult.targets) {
                             await target.damage("thunder");
@@ -2337,7 +2400,11 @@ groupSkill: "qun",
             async cost(event, trigger, player) {
                 event.result = await player.chooseBool(
                     `是否对${get.translation(trigger.source)}发动【应天】？`
-                ).forResult();
+                ).set("ai", () => {
+                    // 判定无代价：♠雷伤2点/♣回复1点。敌人打来的必反；队友误伤时只在濒死赌回复
+                    if (get.attitude(player, trigger.source) < 0) return true;
+                    return player.hp <= 1;
+                }).forResult();
             },
             async content(event, trigger, player) {
                 player.changeZhuanhuanji("hfhy_yingtian");
@@ -2361,6 +2428,25 @@ groupSkill: "qun",
     },
     init(player, skill) {
         player.storage[skill] = true;
+    },
+    ai: {
+        order: 6,
+        result: {
+            player(player) {
+                // 阳面（storage为true）：黑判造成X点雷伤，红判黄巾角色各摸一张
+                if (player.storage.hfhy_yingtian) {
+                    const x = game.countPlayer(cur => cur != player);
+                    if (x <= 0) return 0;
+                    const enemies = game.filterPlayer(cur => get.attitude(player, cur) < 0);
+                    // 场上没有能劈的敌人时不值得翻转
+                    if (!enemies.length) return 0;
+                    // 一半概率劈人一半黄巾摸牌，敌人越多越值
+                    return 1 + Math.min(2, enemies.length);
+                }
+                // 阴面在 damageEnd 已处理，出牌阶段不再主动用
+                return 0;
+            },
+        },
     },
     skill_id: "hfhy_yingtian",
     _priority: 0,
@@ -2399,7 +2485,18 @@ groupSkill: "qun",
                     .set("prompt", `是否对${get.translation(target)}的判定发动【黄天】？`)
                     .set("ai", () => {
                         const evt = _status.event.getTrigger();
-                        if (get.attitude(player, evt.player) > 0) return "选项二";
+                        const target = evt.player;
+                        const judging = target.judging && target.judging[0];
+                        const expect = judging && evt.judge ? evt.judge(judging) : undefined;
+                        const bad = typeof expect == "number" && expect < 0;
+                        const good = typeof expect == "number" && expect > 0;
+                        if (get.attitude(player, target) > 0) {
+                            // 队友判定不利（如乐不思蜀）时打出手牌替换，否则让判定生效后摸牌
+                            if (bad && player.countCards("h")) return "选项一";
+                            return "选项二";
+                        }
+                        // 敌人判定有利（如闪电）时打手牌破坏之，否则不发动
+                        if (good && player.countCards("h")) return "选项一";
                         return "cancel2";
                     })
                     .forResult();
@@ -2473,6 +2570,25 @@ groupSkill: "qun",
     animationColor: "soil",
     filterTarget: (card, player, target) => target != player,
     selectTarget: 1,
+    ai: {
+        order: 9,
+        result: {
+            player(player) {
+                // 限定技：所有黄巾角色弃光手牌，依次视为对目标出杀
+                // 只统计己方黄巾（含自己）——黄巾太少时弃牌代价大于收益
+                const friendly = game.filterPlayer(cur =>
+                    cur.storage.hfhy_huangjin && (cur == player || get.attitude(player, cur) > 0)
+                );
+                if (friendly.length < 2) return 0;
+                return 1 + Math.min(2, friendly.length - 1);
+            },
+            target(player, target) {
+                // 目标是被集火的敌人
+                if (get.attitude(player, target) < 0) return -2;
+                return 0;
+            },
+        },
+    },
     async content(event, trigger, player) {
         const target = event.targets[0];
         const huangjinPlayers = game.filterPlayer(current => current.storage.hfhy_huangjin);
@@ -2772,6 +2888,16 @@ groupSkill: "qun",
     ai: {
         order: 6,
         result: {
+            player(player, target) {
+                if (!target || get.attitude(player, target) >= 0) return 0;
+                // 拆对面牌的基础骚扰收益
+                let val = 1;
+                // 对面有装备牌：弃自己装备可得无视距离的奖励
+                if (target.countCards("e") > 0) val += 0.5;
+                // 自己有杀：弃锦囊后本回合杀加伤，能打出配合
+                if (player.countCards("h", { name: "sha" }) > 0) val += 1;
+                return val;
+            },
             target(player, target) {
                 return -1;
             },
@@ -2791,7 +2917,9 @@ groupSkill: "qun",
         const result = await player.chooseTarget(
             "请选择【杀】的目标",
             (card, player2, target) => player2.canUse({ name: "sha" }, target)
-        ).forResult();
+        ).set("ai", target => {
+            return get.effect(target, { name: "sha" }, player, player);
+        }).forResult();
         if (!result.bool) return;
         
         const target = result.targets[0];
@@ -2829,7 +2957,10 @@ groupSkill: "qun",
                     }
                     event.result = await player.chooseBool(
                         "是否发动【百骑】？失去1点体力，额外指定任意名攻击范围内的目标"
-                    ).forResult();
+                    ).set("ai", () => {
+                        // 血量安全且额外目标里有敌人，才值得失去1点体力
+                        return player.hp > 1 && targets.some(cur => get.attitude(player, cur) < 0);
+                    }).forResult();
                 },
                 async content(event, trigger, player) {
                     await player.loseHp();
@@ -2849,7 +2980,9 @@ groupSkill: "qun",
                             "选择额外目标",
                             [1, targets.length],
                             (card, player2, target) => targets.includes(target)
-                        ).forResult();
+                        ).set("ai", target => {
+                            return get.effect(target, { name: "sha" }, player, player);
+                        }).forResult();
                         if (chooseResult.bool) {
                             trigger.targets.addArray(chooseResult.targets);
                             event.getParent()._baiqi_multi_used = true;
@@ -2865,7 +2998,20 @@ groupSkill: "qun",
     ai: {
         order: 5,
         result: {
-            player: 1,
+            player(player) {
+                // 需要有杀得到且视之为敌人的目标，否则弃手牌毫无意义
+                const hasEnemy = game.hasPlayer(cur =>
+                    cur != player && get.attitude(player, cur) < 0 && player.canUse({ name: "sha" }, cur)
+                );
+                if (!hasEnemy) return 0;
+                const hand = player.getCards("h");
+                if (!hand.length) return 0;
+                const avg = hand.reduce((sum, c) => sum + get.value(c, player), 0) / hand.length;
+                // 未解锁踏浪二阶时有长期收益（进攻距离-1+回合外摸牌）；手牌越多越值钱，代价越高
+                let val = 2 + (player.getStorage("_talang_lv2", false) ? 0 : 2);
+                val -= avg * Math.min(hand.length, 4) * 0.5;
+                return val;
+            },
         },
     },
     skill_id: "hfhy_baiqi",
@@ -3080,6 +3226,12 @@ groupSkill: "qun",
             _priority: 0,
         },
     },
+    ai: {
+        order: 8,
+        result: {
+            player: 1,
+        },
+    },
     skill_id: "hfhy_jizhi",
     _priority: 0,
 },
@@ -3120,7 +3272,9 @@ groupSkill: "qun",
             const result = await player.chooseTarget(
                 "请选择【杀】的目标",
                 (card2, player2, target) => targets.includes(target)
-            ).forResult();
+            ).set("ai", target => {
+                return get.effect(target, { name: "sha" }, player, player);
+            }).forResult();
             if (result.bool && result.targets.length) {
                 await player.useCard(card, result.targets[0], false);
             }
@@ -3183,7 +3337,22 @@ groupSkill: "qun",
     ai: {
         order: 5,
         result: {
-            player: 1,
+            player(player) {
+                const count = player.storage._hfhy_jiufa_count || 0;
+                // 本轮已发动过：每次额外失去1点体力，血量不健康或没有值得杀的敌人时停手
+                if (count > 0) {
+                    if (player.hp <= 2) return 0;
+                    const card = { name: "sha", isCard: true };
+                    const hasEnemy = game.hasPlayer(cur =>
+                        player.canUse(card, cur, false) &&
+                        player.inRange(cur) &&
+                        get.effect(cur, card, player, player) > 0
+                    );
+                    return hasEnemy ? 0.5 : 0;
+                }
+                // 首次免费：摸一张牌并视为使用【杀】
+                return 1;
+            },
         },
     },
     skill_id: "hfhy_jiufa",
@@ -3209,14 +3378,25 @@ groupSkill: "qun",
                 "结束阶段，你失去一点体力并摸两张牌"
             ])
             .set("prompt", get.prompt("hfhy_kunfen"))
+            .set("ai", () => {
+                const ally = game.findPlayer(cur => cur != player && get.attitude(player, cur) >= 2);
+                // 掉血吃不消（血量≤2）且有可靠队友时，把基本牌交给队友保命；否则选延迟掉血摸2
+                if (hasBasic && ally && player.hp <= 2) return "选项一";
+                return "选项二";
+            })
             .forResult();
-        
+
         if (control == "选项一") {
             const result = await player.chooseTarget(
                 get.prompt("hfhy_kunfen"),
                 "选择一名其他角色，交给其你的所有基本牌",
                 (card, player2, target) => target != player2
-            ).forResult();
+            ).set("ai", target => {
+                // 优先交给缺基本牌的亲近队友
+                let val = get.attitude(player, target);
+                if (val > 0 && target.countCards("h", { type: "basic" }) < 2) val += 1;
+                return val;
+            }).forResult();
             if (result.bool && result.targets.length) {
                 const target = result.targets[0];
                 const basics = player.getCards("hej").filter(card => get.type(card, "basic") == "basic");
@@ -3278,7 +3458,8 @@ groupSkill: "qun",
             [2, 2],
             (card, player2, target) => target != player2
         ).set("ai", target => {
-            return get.attitude(player, target) < 0 ? -1 : 0;
+            // 选敌人：越敌对分越高；队友为负分不会被选中
+            return -get.attitude(player, target);
         }).forResult();
         
         if (!result.bool || !result.targets || result.targets.length < 2) return;
@@ -3362,18 +3543,18 @@ groupSkill: "qun",
             target.addTempSkill("fengyin");
         }
         
-        const canBeishui = player.hp > 1;
+        const canBeishui = player.maxHp > 1;
         const list = [];
         list.push("选项一");
         list.push("选项二");
         if (canBeishui) list.push("背水！");
         list.push("cancel2");
-        
+
         const { control } = await player.chooseControl(list)
             .set("choiceList", [
                 `获得${get.translation(target)}一张手牌`,
                 `令${get.translation(target)}不能使用或打出与此杀颜色相同的牌`,
-                "背水！失去1点体力，然后你此阶段使用【杀】的次数+1"
+                "背水！减少1点体力上限，然后你此阶段使用【杀】的次数+1"
             ])
             .set("prompt", "铁骑：请选择一项")
             .forResult();
@@ -3399,7 +3580,7 @@ groupSkill: "qun",
         }
         
         if (isBeishui) {
-            await player.loseHp();
+            await player.loseMaxHp();
             player.addTempSkill("hfhy_tieji_sha_buff", "phaseUseAfter");
             player.addMark("hfhy_tieji_sha_buff", 1, false);
         }
@@ -3467,12 +3648,11 @@ groupSkill: "qun",
 "hfhy_mashu": {
     audio: ["sbtieji1.mp3","sbtieji2.mp3","retieji1.mp3","retieji2.mp3"],
     round:1,
-    forced: true,
     locked: true,
     mod: {
         globalFrom(from, to, distance) {
             const sameGroupCount = game.countPlayer(current => current.group === from.group);
-            const x = Math.floor(sameGroupCount / 2);  
+            const x = Math.floor(sameGroupCount / 2);
             return distance - x;
         },
     },
@@ -3480,20 +3660,13 @@ groupSkill: "qun",
     filter(event, player) {
         return (
             event.player &&
-            get.distance(player, event.player) === 1 &&
-            player.countCards("h") > 0
+            get.distance(player, event.player) === 1
         );
     },
     forced: true,
     async content(event, trigger, player) {
-        const result = await player.chooseToDiscard(
-            `马术：弃置一张手牌，令对${get.translation(trigger.player)}的伤害+1`,
-            "h",
-            true
-        ).forResult();
-        if (result.bool) {
-            trigger.num++;
-        }
+        await player.loseHp();
+        trigger.num++;
     },
     ai: {
         threaten: 1.2,
@@ -3520,28 +3693,41 @@ groupSkill: "qun",
     selectTarget: 1,
     async content(event, trigger, player) {
         const target = event.targets[0];
+        // 非强制chooseCard：目标自主决定是否交牌（AI在最佳分值≤0时拒绝）
         const result = await target.chooseCard(
             "he",
-            true,
-            `羌助：将一张牌交给${get.translation(player)}`
+            `羌助：是否将一张牌交给${get.translation(player)}？若不交，其增加1点体力上限`
         ).set("ai", card => {
+            if (get.attitude(target, player) < 0) return -1;
             return 9 - get.value(card);
         }).forResult();
-        if (!result.bool) return;
-        const cardName = result.cards[0].name;
-        target.give(result.cards, player, true);
-        player.storage._qiangzhu_name = cardName;
-        player.addTempSkill("hfhy_qiangzhu_buff", "phaseAfter");
+        if (result.bool && result.cards?.length) {
+            const cardName = result.cards[0].name;
+            await target.give(result.cards, player, true);
+            player.storage.hfhy_qiangzhu_buff = cardName;
+            player.addTempSkill("hfhy_qiangzhu_buff", "phaseUseAfter");
+        } else {
+            game.log(target, "拒绝将牌交给", player);
+            await player.gainMaxHp();
+        }
     },
     subSkill: {
         buff: {
-            onremove(player) {
-                delete player.storage._qiangzhu_name;
+            mark: true,
+            marktext: "羌",
+            intro: {
+                content(storage) {
+                    if (storage) return `本阶段使用【${get.translation(storage)}】无次数限制`;
+                    return "本阶段使用某张同名牌无次数限制";
+                },
+            },
+            onremove(player, skill) {
+                delete player.storage[skill];
             },
             mod: {
                 cardUsable(card, player, num) {
-                    if (card.name === player.storage._qiangzhu_name) {
-                        return 999;
+                    if (card.name === player.storage.hfhy_qiangzhu_buff) {
+                        return Infinity;
                     }
                 },
             },
@@ -3564,9 +3750,8 @@ groupSkill: "qun",
     audio: ["zhuiji1.mp3","zhuiji2.mp3","ol_shichou1.mp3","ol_shichou2.mp3"],
     groupSkill: "shu",
     trigger: { player: "phaseZhunbeiBegin" },
-    forced: true,
     filter(event, player) {
-        return player.group == "shu";
+        return player.group == "shu" && player.countCards("h") > 0;
     },
     mark: true,
     marktext: "仇",
@@ -3578,24 +3763,23 @@ groupSkill: "qun",
     init(player, skill) {
         player.storage[skill] = 0;
     },
+    async cost(event, trigger, player) {
+        const result = await player.chooseToDiscard("h", get.prompt2("hfhy_xuechou"))
+            .set("ai", card => 5 - get.value(card))
+            .forResult();
+        event.result = { bool: result?.bool };
+    },
     async content(event, trigger, player) {
-        const result = await player.chooseTarget("请选择一名角色获得“仇”标记", true)
+        const result = await player.chooseTarget("令一名角色获得一个“仇”标记", true)
             .set("ai", target => {
                 return get.attitude(player, target) < 0 ? 5 : 1;
             })
             .forResult();
         if (!result.bool) return;
-        
+
         const target = result.targets[0];
         target.addMark("hfhy_xuechou", 1, false);
         target.markSkill("hfhy_xuechou");
-    },
-    mod: {
-        targetInRange(card, player, target) {
-            if (target && target.countMark("hfhy_xuechou") > 0) {
-                return true;
-            }
-        },
     },
     group: ["hfhy_xuechou_damage"],
     subSkill: {
@@ -3610,21 +3794,12 @@ groupSkill: "qun",
                     event.player.countMark("hfhy_xuechou") > 0
                 );
             },
-            async cost(event, trigger, player) {
-                const target = trigger.player;
-                event.result = await player.chooseBool(
-                    `是否移去${get.translation(target)}的一个"仇"标记，令此伤害+1？`
-                ).set("ai", () => {
-                    const target = get.event().trigger.player;
-                    return get.attitude(player, target) < 0;
-                }).forResult();
-            },
+            logTarget: "player",
             async content(event, trigger, player) {
                 const target = trigger.player;
-                if (!target || target.countMark("hfhy_xuechou") <= 0) return;
                 target.removeMark("hfhy_xuechou", 1, false);
                 target.markSkill("hfhy_xuechou");
-                trigger.num++;
+                await player.gainMaxHp();
             },
             sub: true,
             sourceSkill: "hfhy_xuechou",
@@ -3864,7 +4039,7 @@ groupSkill: "qun",
                     next.set("selectCard", [0, expansions.length, 0, handCards.length]);
                     next.set("processAI", list => {
                         const player = get.player();
-                        const cards = list[0][1].concat(list[1][1]).sort((a, b) => get.value(a) - get.value(b));
+                        const cards = list[0][1].concat(list[1][1]).sort((a, b) => get.value(a, player) - get.value(b, player));
                         const expandCount = player.getExpansions("hfhy_jicai").length;
                         return [cards.slice(0, expandCount), cards.slice(expandCount)];
                     });
@@ -3915,11 +4090,21 @@ groupSkill: "qun",
         const expansions = player.getExpansions("hfhy_jicai").filter(c => c.hasGaintag("hfhy_jicai"));
         if (!expansions.length) return;
 
-        const result = await player.chooseButton( 
+        // 期望换取的类型：1基本/2锦囊/3装备，按当前需求决定
+        let want = 2;
+        if (player.countCards("h", { type: "basic" }) < 2) want = 1;
+        else if (player.getCards("e").length == 0) want = 3;
+        want = Math.min(want, expansions.length);
+
+        const result = await player.chooseButton(
             [expansions, "请选择至多三张“财”"]
         )
         .set("filterButton", button => button.link.hasGaintag("hfhy_jicai"))
         .set("selectButton", [1, Math.min(3, expansions.length)])
+        .set("ai", () => {
+            // “财”之间无差别，按已选数量停在期望张数（贪心选到分为负即止）
+            return ui.selected.buttons.length < want ? 1 : -1;
+        })
         .forResult();
 
         if (!result.bool || !result.links || !result.links.length) return;
@@ -3968,8 +4153,10 @@ groupSkill: "qun",
             `济困：交给${get.translation(target)}一张牌`
         ).set("ai", function (card) {
             if (get.position(card) == "e") return -1;
-            if (get.type(card) == "equip") return 0.5;
-            return 0;
+            // 优先交低价值装备牌（触发目标回血并自动装备）
+            if (get.type(card) == "equip") return 6 - get.value(card);
+            // 没有装备牌时交价值最低的牌
+            return -get.value(card);
         }).forResult();
 
         if (!result.bool || !result.cards || !result.cards.length) return;
@@ -3983,15 +4170,193 @@ groupSkill: "qun",
         }
     },
     ai: {
-        order: 5,
+        order: 4,
         result: {
             player(player, target) {
+                // 只对队友发动：交牌是纯资助
+                if (get.attitude(player, target) <= 0) return 0;
+                // 队友受伤且手上有装备牌：交装备触发回血，收益最高
+                if (target.isDamaged() && player.hasCard(card => get.type(card) == "equip", "h")) return 2;
+                // 普通资助：交一张低价值牌
+                return 0.5;
+            },
+            target(player, target) {
                 if (get.attitude(player, target) > 0) return 1;
-                return 0;
+                return -1;
             },
         },
     },
     skill_id: "hfhy_jikun",
+    _priority: 0,
+},
+"hfhy_qiaosi": {
+    trigger: { player: "useCardAfter" },
+    filter(event, player) {
+        if (event.card.hfhy_qiaosi_copy) return false;
+        if (player != _status.currentPhase || !event.getParent("phaseUse")) return false;
+        if (get.type(event.card) == "equip") return false;
+        const used = player.storage.hfhy_qiaosi_used || [];
+        if (used.includes(event.card.name)) return false;
+        const copy = get.autoViewAs({ name: event.card.name, nature: event.card.nature, isCard: true, hfhy_qiaosi_copy: true });
+        if (!player.hasUseTarget(copy)) return false;
+        return player.hasCard(card => get.type(card) == get.type(event.card), "h");
+    },
+    async cost(event, trigger, player) {
+        const type = get.type(trigger.card);
+        const result = await player.chooseToDiscard("h", get.prompt2("hfhy_qiaosi"))
+            .set("filterCard", card => get.type(card) == type)
+            .set("ai", card => 5 - get.value(card))
+            .forResult();
+        event.result = { bool: result?.bool };
+    },
+    async content(event, trigger, player) {
+        const used = player.storage.hfhy_qiaosi_used || [];
+        if (!used.includes(trigger.card.name)) used.push(trigger.card.name);
+        player.storage.hfhy_qiaosi_used = used;
+        const card = get.autoViewAs({ name: trigger.card.name, nature: trigger.card.nature, isCard: true, hfhy_qiaosi_copy: true });
+        await player.chooseUseTarget(card, true);
+    },
+    mod: {
+        cardUsable(card, player, num) {
+            if (card.hfhy_qiaosi_copy) return Infinity;
+        },
+    },
+    group: ["hfhy_qiaosi_reset"],
+    subSkill: {
+        reset: {
+            charlotte: true,
+            forced: true,
+            trigger: { player: "phaseUseBegin" },
+            firstDo: true,
+            async content(event, trigger, player) {
+                player.storage.hfhy_qiaosi_used = [];
+            },
+            sub: true,
+            sourceSkill: "hfhy_qiaosi",
+            skill_id: "hfhy_qiaosi_reset",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_qiaosi",
+    _priority: 0,
+},
+"hfhy_tiangong": {
+    trigger: { player: "phaseUseBegin" },
+    filter(event, player) {
+        return true;
+    },
+    async cost(event, trigger, player) {
+        player.storage.hfhy_tiangong_types = [];
+        const choices = [["basic", "基本牌"], ["trick", "锦囊牌"], ["equip", "装备牌"]];
+        const result = await player.chooseButton(["天工：选择一种类型", [choices, "textbutton"]])
+            .set("ai", button => {
+                const type = button.link;
+                let num = player.countCards("h", card => get.type(card) == type);
+                if (type == "equip") num += 1.5;
+                return num;
+            })
+            .forResult();
+        event.result = { bool: result?.bool, cost_data: result?.links?.[0] };
+    },
+    async content(event, trigger, player) {
+        player.storage.hfhy_tiangong_type = event.cost_data;
+        player.addTempSkill("hfhy_tiangong_effect", "phaseUseEnd");
+        player.markSkill("hfhy_tiangong_effect");
+    },
+    group: ["hfhy_tiangong_track", "hfhy_tiangong_jieshu"],
+    subSkill: {
+        effect: {
+            charlotte: true,
+            mark: true,
+            marktext: "工",
+            intro: {
+                content(storage, player) {
+                    const names = { basic: "基本牌", trick: "锦囊牌", equip: "装备牌" };
+                    const type = names[player.storage.hfhy_tiangong_type] || "所选类型";
+                    return `本阶段使用${type}时摸一张牌，使用其他类型的牌无距离限制`;
+                },
+            },
+            onremove(player) {
+                delete player.storage.hfhy_tiangong_type;
+            },
+            trigger: { player: "useCard" },
+            forced: true,
+            filter(event, player) {
+                return _status.currentPhase == player && get.type(event.card) == player.storage.hfhy_tiangong_type;
+            },
+            async content(event, trigger, player) {
+                await player.draw();
+            },
+            mod: {
+                targetInRange(card, player, target) {
+                    if (get.type(card) != player.storage.hfhy_tiangong_type) return true;
+                },
+            },
+            sub: true,
+            sourceSkill: "hfhy_tiangong",
+            skill_id: "hfhy_tiangong_effect",
+            _priority: 0,
+        },
+        track: {
+            charlotte: true,
+            forced: true,
+            nopop: true,
+            trigger: { player: "useCard" },
+            filter(event, player) {
+                return _status.currentPhase == player && player.hasSkill("hfhy_tiangong_effect");
+            },
+            async content(event, trigger, player) {
+                const types = player.storage.hfhy_tiangong_types || [];
+                const type = get.type(trigger.card);
+                if (!types.includes(type)) types.push(type);
+                player.storage.hfhy_tiangong_types = types;
+            },
+            sub: true,
+            sourceSkill: "hfhy_tiangong",
+            skill_id: "hfhy_tiangong_track",
+            _priority: 0,
+        },
+        jieshu: {
+            trigger: { player: "phaseJieshuBegin" },
+            filter(event, player) {
+                return new Set(player.storage.hfhy_tiangong_types || []).size >= 3;
+            },
+            async cost(event, trigger, player) {
+                const result = await player.chooseTarget("天工：选择一名角色，置入一张装备牌")
+                    .set("filterTarget", (card, player, target) => {
+                        return player.hasCard(cd => get.type(cd) == "equip" && target.canEquip(cd, true), "h") ||
+                            Array.from(ui.discardPile.childNodes).some(cd => get.type(cd) == "equip" && target.canEquip(cd, true));
+                    })
+                    .set("ai", target => get.attitude(player, target))
+                    .forResult();
+                if (!result.bool) return;
+                const target = result.targets[0];
+                const handEquips = player.getCards("h", cd => get.type(cd) == "equip" && target.canEquip(cd, true));
+                const pileEquips = Array.from(ui.discardPile.childNodes).filter(cd => get.type(cd) == "equip" && target.canEquip(cd, true));
+                const chooseResult = await player.chooseButton([
+                    "天工：选择一张装备牌置入" + get.translation(target) + "的装备区",
+                    [handEquips.concat(pileEquips), "card"],
+                ])
+                    .set("ai", button => {
+                        const card = button.link;
+                        if (pileEquips.includes(card)) return 10 + get.value(card);
+                        return 10 - get.value(card);
+                    })
+                    .forResult();
+                if (!chooseResult.bool) return;
+                event.result = { bool: true, cost_data: { target, card: chooseResult.links[0] } };
+            },
+            async content(event, trigger, player) {
+                const { target, card } = event.cost_data;
+                await target.equip(card);
+            },
+            sub: true,
+            sourceSkill: "hfhy_tiangong",
+            skill_id: "hfhy_tiangong_jieshu",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_tiangong",
     _priority: 0,
 },
 };
