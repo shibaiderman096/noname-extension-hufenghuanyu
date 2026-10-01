@@ -1139,7 +1139,7 @@ groupSkill: "qun",
             filter(event, player) {
                 // 转换技状态：falsy=阳，truthy=阴（changeZhuanhuanji翻转storage）
                 if (player.getStorage("hfhy_mzgl_bagua", false)) return false;
-                if (event.type === "wuxie") return false;
+                // 牌库包含无懈可击：响应无懈的场合经event.filterCard动态过滤后可视为打出无懈
                 if (!player.countCards("h")) return false;
                 const names = player.getStorage("hfhy_mzgl_bagua_names", []);
                 for (const info of lib.inpile) {
