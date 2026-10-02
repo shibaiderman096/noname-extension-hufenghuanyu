@@ -5092,6 +5092,345 @@ groupSkill: "qun",
     skill_id: "hfhy_tiangong",
     _priority: 0,
 },
+"hfhy_kurou": {
+    audio: ["kurou1.mp3", "kurou2.mp3"],
+    locked: true,
+    enable: "phaseUse",
+    usable: 1,
+    filter(event, player) {
+        return player.hp > 0;
+    },
+    async content(event, trigger, player) {
+        await player.loseHp();
+    },
+    ai: {
+        order: 6,
+        // 苦肉①把伤害转成体力流失还附带摸牌，敌人打他收益打折
+        maixie: true,
+        effect: {
+            target(card, player, target) {
+                if (get.tag(card, "damage") && target.hp > 1) return [1, 0.65];
+            },
+        },
+        result: {
+            player(player) {
+                // 掉1血换已损体力数的摸牌（苦肉②）+一枚"降"标记（诈降①），血线安全才主动发动
+                if (player.hp > 2) return 1;
+                if (player.hp > 1 && game.hasPlayer(current => get.attitude(player, current) < 0 && current.countMark("hfhy_jiang") > 0)) return 1;
+                return 0;
+            },
+        },
+    },
+    group: ["hfhy_kurou_convert", "hfhy_kurou_draw"],
+    subSkill: {
+        // ①你即将受到的伤害视为失去体力（官方绝情·改同款：damageBefore取消伤害改loseHp）
+        convert: {
+            audio: ["kurou1.mp3", "kurou2.mp3"],
+            forced: true,
+            trigger: { player: "damageBefore" },
+            filter(event, player) {
+                return event.num > 0;
+            },
+            async content(event, trigger, player) {
+                trigger.cancel();
+                await player.loseHp(trigger.num);
+            },
+            sub: true,
+            sourceSkill: "hfhy_kurou",
+            skill_id: "hfhy_kurou_convert",
+            _priority: 0,
+        },
+        // ②当你失去体力后，摸已损失体力值数的牌
+        draw: {
+            audio: ["kurou1.mp3", "kurou2.mp3"],
+            forced: true,
+            trigger: { player: "loseHpAfter" },
+            async content(event, trigger, player) {
+                await player.draw(player.getDamagedHp());
+            },
+            sub: true,
+            sourceSkill: "hfhy_kurou",
+            skill_id: "hfhy_kurou_draw",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_kurou",
+    _priority: 0,
+},
+"hfhy_zhaxiang": {
+    audio: ["zhaxiang1.mp3", "zhaxiang2.mp3"],
+    forced: true,
+    trigger: { player: "loseHpAfter" },
+    // ③效果一（≥1枚"降"）：对被标记角色用牌无距离限制
+    mod: {
+        targetInRange(card, player, target) {
+            if (target.countMark("hfhy_jiang") > 0) return true;
+        },
+    },
+    async content(event, trigger, player) {
+        const result = await player.chooseTarget("诈降：令一名其他角色获得一枚“降”标记", true)
+            .set("filterTarget", (card, player2, target) => target != player && target.isIn())
+            .set("ai", target => {
+                // "降"是负面标记：优先给敌人，已带标记的叠到2枚激活手牌上限-1，残血敌人优先
+                if (get.attitude(player, target) >= 0) return -1;
+                let score = 3;
+                if (target.countMark("hfhy_jiang") > 0) score += 1;
+                if (target.hp <= 2) score += 1;
+                return score;
+            })
+            .forResult();
+        if (!result.bool || !result.targets?.length) return;
+        const target = result.targets[0];
+        target.addMark("hfhy_jiang", 1, false);
+        target.markSkill("hfhy_jiang");
+        target.addSkill("hfhy_zhaxiang_aura");
+    },
+    group: ["hfhy_zhaxiang_choose"],
+    subSkill: {
+        // ②当拥有"降"标记的角色受到伤害时，二选一
+        choose: {
+            audio: ["zhaxiang1.mp3", "zhaxiang2.mp3"],
+            forced: true,
+            trigger: { global: "damageBegin1" },
+            filter(event, player) {
+                return event.player != player && event.player.countMark("hfhy_jiang") > 0;
+            },
+            logTarget: "player",
+            async content(event, trigger, player) {
+                const target = trigger.player;
+                const canSteal = target.countCards("h") > 0;
+                const controls = canSteal ? ["选项一", "选项二"] : ["选项一"];
+                const { control } = await player.chooseControl(controls)
+                    .set("choiceList", [
+                        "失去1点体力",
+                        `获得${get.translation(target)}的一张手牌，然后移去其一枚“降”标记`,
+                    ])
+                    .set("prompt", `诈降：${get.translation(target)}拥有“降”标记且正在受到伤害`)
+                    .set("ai", () => {
+                        const me = get.player();
+                        if (!canSteal) return "选项一";
+                        const hostile = get.attitude(me, target) < 0;
+                        // 血线低或敌方手牌多时优先偷牌；血量充裕时选失去体力（苦肉②摸牌+诈降①叠标记）
+                        if (me.hp <= 2) return "选项二";
+                        if (hostile && target.countCards("h") >= 3) return "选项二";
+                        if (me.hp > 2) return "选项一";
+                        return "选项二";
+                    })
+                    .forResult();
+                if (control == "选项二" && canSteal) {
+                    await player.gainPlayerCard(target, "h", true);
+                    target.removeMark("hfhy_jiang", 1, false);
+                } else {
+                    await player.loseHp();
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_zhaxiang",
+            skill_id: "hfhy_zhaxiang_choose",
+            _priority: 0,
+        },
+        // ③效果二（≥2枚"降"）：光环挂被标记角色身上，手牌上限-1
+        aura: {
+            charlotte: true,
+            mod: {
+                maxHandcard(player, num) {
+                    if (player.countMark("hfhy_jiang") >= 2) return num - 1;
+                },
+            },
+            sub: true,
+            sourceSkill: "hfhy_zhaxiang",
+            skill_id: "hfhy_zhaxiang_aura",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_zhaxiang",
+    _priority: 0,
+},
+"hfhy_jiang": {
+    // 「降」标记载体：诈降授予其他角色的负面标记
+    mark: true,
+    marktext: "降",
+    intro: {
+        content(storage) {
+            return `拥有${storage || 0}枚"降"标记`;
+        },
+    },
+},
+"hfhy_fenqu": {
+    audio: ["dcsblieji1.mp3", "dcsblieji2.mp3"],
+    forced: true,
+    unique: true,
+    juexingji: true,
+    skillAnimation: true,
+    animationColor: "fire",
+    derivation: "hfhy_pozhen",
+    trigger: { player: "dying" },
+    filter(event, player) {
+        return game.countPlayer(current => current.countMark("hfhy_jiang") > 0);
+    },
+    async content(event, trigger, player) {
+        player.awakenSkill("hfhy_fenqu");
+        await player.addSkills("hfhy_pozhen");
+        await player.link(true);
+        const marked = game.filterPlayer(current => current != player && current.countMark("hfhy_jiang") > 0);
+        for (const target of marked) {
+            if (target.isIn()) await target.link(true);
+        }
+        for (const current of game.filterPlayer()) {
+            const count = current.countMark("hfhy_jiang");
+            if (count > 0) current.removeMark("hfhy_jiang", count, false);
+        }
+        await player.removeSkills(["hfhy_kurou", "hfhy_zhaxiang"]);
+    },
+    skill_id: "hfhy_fenqu",
+    _priority: 0,
+},
+"hfhy_pozhen": {
+    audio: ["twjuyan1.mp3", "twjuyan2.mp3"],
+    limited: true,
+    skillAnimation: true,
+    animationColor: "fire",
+    enable: "phaseUse",
+    filter(event, player) {
+        return player.countCards("h") > 0;
+    },
+    async content(event, trigger, player) {
+        player.awakenSkill("hfhy_pozhen");
+        const result = await player.chooseTarget("破阵：选择一名角色（可以是你自己）", true)
+            .set("filterTarget", (card, player2, target) => {
+                if (!target.isIn() || !target.countCards("h")) return false;
+                if (target == player) return true;
+                // 需存在双方共有花色，否则无从弃起、伤害为0
+                const mySuits = new Set(player.getCards("h").map(c => get.suit(c)));
+                return target.getCards("h").some(c => mySuits.has(get.suit(c)));
+            })
+            .set("ai", target => {
+                if (target == player) return -10;
+                if (get.attitude(player, target) >= 0) return -1;
+                // 共有花色越多伤害越高（双方都会弃掉这些花色的牌），残血敌人优先
+                const mySuits = new Set(player.getCards("h").map(c => get.suit(c)));
+                let common = 0;
+                for (const suit of new Set(target.getCards("h").map(c => get.suit(c)))) {
+                    if (mySuits.has(suit)) common++;
+                }
+                return common * 2 + (target.hp <= 4 ? 1 : 0);
+            })
+            .forResult();
+        if (!result.bool || !result.targets?.length) return;
+        const target = result.targets[0];
+        await target.showHandcards(`破阵：${get.translation(target)}的手牌`);
+
+        // 对自己发动：只弃自己的牌，X=弃置牌的花色数
+        if (target == player) {
+            const result2 = await player.chooseCard("h", [1, player.countCards("h")], true, "破阵：弃置任意张手牌，对你造成X点火焰伤害（X为弃置牌的花色数）")
+                .set("ai", card => -get.value(card, player))
+                .forResult();
+            if (!result2.bool || !result2.cards?.length) return;
+            const x2 = new Set(result2.cards.map(card => get.suit(card))).size;
+            await player.discard(result2.cards);
+            if (x2 > 0 && player.isIn()) {
+                await player.damage(x2, player, "fire");
+            }
+            return;
+        }
+
+        const myCards = player.getCards("h");
+        const targetCards = target.getCards("h");
+        const mySuits = new Set(myCards.map(card => get.suit(card)));
+        const targetSuits = new Set(targetCards.map(card => get.suit(card)));
+        const common = [...mySuits].filter(suit => targetSuits.has(suit));
+        const myPanel = myCards.filter(card => common.includes(get.suit(card)));
+        const targetPanel = targetCards.filter(card => common.includes(get.suit(card)));
+
+        // 双栏选牌窗口（同劫营）：我选择双方各弃哪些牌，每种花色双方至少各选一张
+        const dialog = [
+            "破阵：请选择双方手牌中花色相同的牌（每种花色双方至少各选一张）",
+            "你的手牌",
+            myPanel,
+            `${get.translation(target)}的手牌`,
+            targetPanel,
+        ];
+        // AI预案：每种共有花色，用我最廉价的一张换目标最值钱的一张并+1伤害，净收益为正才纳入
+        const plan = new Set();
+        for (const suit of common) {
+            const mine = myPanel.filter(card => get.suit(card) === suit);
+            const theirs = targetPanel.filter(card => get.suit(card) === suit);
+            if (!mine.length || !theirs.length) continue;
+            const myCheapest = mine.sort((a, b) => get.value(a, player) - get.value(b, player))[0];
+            const theirBest = theirs.sort((a, b) => get.value(b, target) - get.value(a, target))[0];
+            if (get.value(theirBest, target) - get.value(myCheapest, player) + 2 > 0) {
+                plan.add(myCheapest);
+                plan.add(theirBest);
+            }
+        }
+        const next = player.chooseButton([2, 100], dialog);
+        next.set("filterButton", filterButton);
+        next.set("filterOk", filterOk);
+        next.set("ai", processAI);
+        const result2 = await next.forResult();
+        if (!result2.bool) return;
+        const mySel = result2.links.filter(card => get.owner(card) === player);
+        const targetSel = result2.links.filter(card => get.owner(card) === target);
+        if (!mySel.length) return;
+        const x = new Set(mySel.map(card => get.suit(card))).size;
+        await player.discard(mySel);
+        if (targetSel.length) await target.discard(targetSel);
+        if (x > 0 && target.isIn()) {
+            await target.damage(x, player, "fire");
+        }
+
+        function filterButton(button) {
+            const card = button.link;
+            const owner = get.owner(card);
+            const suit = get.suit(card);
+            if (owner && !lib.filter.canBeDiscarded(card, owner, player)) return false;
+            const selected = ui.selected.buttons.map(b => b.link);
+            const mySel2 = selected.filter(c => get.owner(c) === player);
+            const targetSel2 = selected.filter(c => get.owner(c) === target);
+            if (owner === player) {
+                // 对面该花色已选过，或还有未选的可配对牌
+                if (targetSel2.some(c => get.suit(c) === suit)) return true;
+                return targetPanel.some(c => !selected.includes(c) && get.suit(c) === suit && lib.filter.canBeDiscarded(c, target, player));
+            }
+            if (owner === target) {
+                if (mySel2.some(c => get.suit(c) === suit)) return true;
+                return myPanel.some(c => !selected.includes(c) && get.suit(c) === suit && lib.filter.canBeDiscarded(c, player, player));
+            }
+            return false;
+        }
+        function filterOk() {
+            const selected = ui.selected.buttons.map(b => b.link);
+            if (!selected.length) return false;
+            const mySel2 = selected.filter(c => get.owner(c) === player);
+            const targetSel2 = selected.filter(c => get.owner(c) === target);
+            if (!mySel2.length || !targetSel2.length) return false;
+            const mySuits2 = new Set(mySel2.map(c => get.suit(c)));
+            const targetSuits2 = new Set(targetSel2.map(c => get.suit(c)));
+            if (mySuits2.size !== targetSuits2.size) return false;
+            for (const suit of mySuits2) {
+                if (!targetSuits2.has(suit)) return false;
+            }
+            return true;
+        }
+        function processAI(button) {
+            return plan.has(button.link) ? 1 : -1;
+        }
+    },
+    ai: {
+        order: 10,
+        result: {
+            player(player) {
+                const mySuits = new Set(player.getCards("h").map(c => get.suit(c)));
+                return game.hasPlayer(current => {
+                    if (current == player || get.attitude(player, current) >= 0 || !current.countCards("h")) return false;
+                    return current.getCards("h").some(c => mySuits.has(get.suit(c)));
+                }) ? 1 : 0;
+            },
+        },
+    },
+    skill_id: "hfhy_pozhen",
+    _priority: 0,
+},
 };
 export { skills };
 
