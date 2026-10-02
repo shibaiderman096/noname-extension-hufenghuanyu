@@ -191,11 +191,11 @@ export default function(){
             "po_zhaoyun": {
                 sex: "male",
                 group: "shu",
-                hp: 3,
+                hp: 2,
                 maxHp: 3,
                 skills: ["hfhy_gudan"],
                 img: "extension/呼风唤雨/image/po_zhaoyun.jpg",
-                dieAudios: ["dc_zhaoyun.mp3"],
+                dieAudios: ["sb_zhaoyun.mp3"],
             },
 
         },

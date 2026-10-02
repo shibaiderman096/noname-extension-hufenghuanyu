@@ -5432,9 +5432,10 @@ groupSkill: "qun",
     _priority: 0,
 },
 "hfhy_gudan": {
-    // 孤胆：高频触发静默（nopop），胆标记载体+阈值授予龙胆/绝境/怀幼/破围
-    audio: "longdan_sha",
-    nopop: true,
+    // 孤胆：高频触发静默用 popup:false（引擎触发技弹窗判断 info.popup!=false）；
+    // 不能用 nopop:true —— 图鉴技能列表会过滤 nopop 技能导致"无法查看技能"
+    audio: "sblongdan",
+    popup: false,
     mark: true,
     marktext: "胆",
     intro: {
@@ -5484,7 +5485,7 @@ groupSkill: "qun",
     _priority: 0,
 },
 "hfhy_longdan": {
-    audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+    audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
     // 主技能只做容器：enable/viewAs 全在子技能上，主技能不可被 chooseToUse 选中（否则 setContent(undefined) 崩溃）
     // 以此法转换的牌不计入次数限制：viewAs 带 storage 标记（VCard 构造时保留，unsure 按钮阶段也在）
     mod: {
@@ -5497,7 +5498,7 @@ groupSkill: "qun",
     group: ["hfhy_longdan_sha", "hfhy_longdan_shan"],
     subSkill: {
         sha: {
-            audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+            audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
             enable: ["chooseToUse", "chooseToRespond"],
             filterCard: { name: "shan" },
             position: "hs",
@@ -5526,7 +5527,7 @@ groupSkill: "qun",
             _priority: 0,
         },
         shan: {
-            audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+            audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
             enable: ["chooseToUse", "chooseToRespond"],
             filterCard: { name: "sha" },
             position: "hs",
@@ -5559,7 +5560,7 @@ groupSkill: "qun",
     _priority: 0,
 },
 "hfhy_juejing": {
-    audio: ["dcjuejing1.mp3", "dcjuejing2.mp3"],
+    audio: ["xinjuejing1.mp3", "xinjuejing2.mp3"],
     trigger: { player: "dying" },
     filter(event, player) {
         return player.countCards("he") >= 2;
@@ -5586,7 +5587,7 @@ groupSkill: "qun",
     _priority: 0,
 },
 "hfhy_huaiyou": {
-    audio: ["longhun1.mp3", "longhun2.mp3"],
+    audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
     mod: {
         maxHandcard(player, num) {
             return Math.floor(player.countMark("hfhy_gudan") / 2);
@@ -5595,7 +5596,7 @@ groupSkill: "qun",
     group: ["hfhy_huaiyou_draw"],
     subSkill: {
         draw: {
-            audio: ["longhun1.mp3", "longhun2.mp3"],
+            audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
             forced: true,
             trigger: { player: "phaseDrawBegin1" },
             filter(event, player) {
@@ -5616,7 +5617,7 @@ groupSkill: "qun",
     _priority: 0,
 },
 "hfhy_powei": {
-    audio: ["jixi1.mp3", "jixi2.mp3"],
+    audio: ["chongzhen1.mp3", "chongzhen2.mp3"],
     enable: "phaseUse",
     usable: 1,
     filter(event, player) {
