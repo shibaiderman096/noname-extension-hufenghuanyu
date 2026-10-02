@@ -5431,6 +5431,263 @@ groupSkill: "qun",
     skill_id: "hfhy_pozhen",
     _priority: 0,
 },
+"hfhy_gudan": {
+    // 孤胆：高频触发静默（nopop），胆标记载体+阈值授予龙胆/绝境/怀幼/破围
+    audio: "longdan_sha",
+    nopop: true,
+    mark: true,
+    marktext: "胆",
+    intro: {
+        content(storage) {
+            const n = storage || 0;
+            const list = [];
+            if (n >= 2) list.push("龙胆");
+            if (n >= 6) list.push("绝境");
+            if (n >= 10) list.push("怀幼");
+            if (n >= 14) list.push("破围");
+            return `拥有${n}个"胆"标记` + (list.length ? `，视为拥有【${list.join("】【")}】` : "");
+        },
+    },
+    init(player, skill) {
+        player.storage[skill] = 0;
+    },
+    forced: true,
+    trigger: {
+        player: ["useCard", "respond", "dying", "dyingAfter", "damageEnd"],
+        source: "damageSource",
+    },
+    filter(event, player) {
+        if (event.name == "useCard" || event.name == "respond") {
+            return event.card && get.type(event.card) == "basic";
+        }
+        if (event.name == "dyingAfter") {
+            return player.isIn();
+        }
+        return true;
+    },
+    async content(event, trigger, player) {
+        player.addMark("hfhy_gudan", 1, false);
+        player.markSkill("hfhy_gudan");
+        const n = player.countMark("hfhy_gudan");
+        const toGain = [];
+        if (n >= 2 && !player.hasSkill("hfhy_longdan")) toGain.push("hfhy_longdan");
+        if (n >= 6 && !player.hasSkill("hfhy_juejing")) toGain.push("hfhy_juejing");
+        if (n >= 10 && !player.hasSkill("hfhy_huaiyou")) toGain.push("hfhy_huaiyou");
+        if (n >= 14 && !player.hasSkill("hfhy_powei")) toGain.push("hfhy_powei");
+        if (toGain.length) {
+            game.log(player, "获得了技能", "#g【" + toGain.map(name => get.translation(name)).join("】【") + "】");
+            await player.addSkills(toGain);
+        }
+    },
+    derivation: ["hfhy_longdan", "hfhy_juejing", "hfhy_huaiyou", "hfhy_powei"],
+    skill_id: "hfhy_gudan",
+    _priority: 0,
+},
+"hfhy_longdan": {
+    audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+    // 主技能只做容器：enable/viewAs 全在子技能上，主技能不可被 chooseToUse 选中（否则 setContent(undefined) 崩溃）
+    // 以此法转换的牌不计入次数限制：viewAs 带 storage 标记（VCard 构造时保留，unsure 按钮阶段也在）
+    mod: {
+        cardUsable(card, player, num) {
+            if (card.name == "sha" && card.storage && card.storage.hfhy_longdan_convert) {
+                return Infinity;
+            }
+        },
+    },
+    group: ["hfhy_longdan_sha", "hfhy_longdan_shan"],
+    subSkill: {
+        sha: {
+            audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+            enable: ["chooseToUse", "chooseToRespond"],
+            filterCard: { name: "shan" },
+            position: "hs",
+            viewAs: { name: "sha", storage: { hfhy_longdan_convert: true } },
+            viewAsFilter(player) {
+                if (!player.hasCards("hs", "shan")) return false;
+            },
+            prompt: "龙胆：将一张【闪】当【杀】使用或打出",
+            check(card) {
+                return 6 - get.value(card);
+            },
+            ai: {
+                respondSha: true,
+                skillTagFilter(player) {
+                    if (!player.hasCards("hs", "shan")) return false;
+                },
+                order() {
+                    return get.order({ name: "sha" }) + 0.1;
+                },
+                useful: -1,
+                value: -1,
+            },
+            sub: true,
+            sourceSkill: "hfhy_longdan",
+            skill_id: "hfhy_longdan_sha",
+            _priority: 0,
+        },
+        shan: {
+            audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+            enable: ["chooseToUse", "chooseToRespond"],
+            filterCard: { name: "sha" },
+            position: "hs",
+            viewAs: { name: "shan", storage: { hfhy_longdan_convert: true } },
+            viewAsFilter(player) {
+                if (!player.hasCards("hs", "sha")) return false;
+            },
+            prompt: "龙胆：将一张【杀】当【闪】使用或打出",
+            check(card) {
+                return 6 - get.value(card);
+            },
+            ai: {
+                respondShan: true,
+                skillTagFilter(player) {
+                    if (!player.hasCards("hs", "sha")) return false;
+                },
+                effect: {
+                    target(card, player, target, current) {
+                        if (get.tag(card, "respondShan") && current < 0) return 0.6;
+                    },
+                },
+            },
+            sub: true,
+            sourceSkill: "hfhy_longdan",
+            skill_id: "hfhy_longdan_shan",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_longdan",
+    _priority: 0,
+},
+"hfhy_juejing": {
+    audio: ["dcjuejing1.mp3", "dcjuejing2.mp3"],
+    trigger: { player: "dying" },
+    filter(event, player) {
+        return player.countCards("he") >= 2;
+    },
+    async cost(event, trigger, player) {
+        const result = await player.chooseToDiscard(2, "he", get.prompt2("hfhy_juejing"))
+            .set("filterCard", (card, cards) => {
+                if (cards.length) return get.suit(card) != get.suit(cards[0]);
+                return true;
+            })
+            .set("filterOk", () => {
+                const cards = ui.selected.cards;
+                return cards.length == 2 && get.suit(cards[0]) != get.suit(cards[1]);
+            })
+            .set("complexCard", true)
+            .set("ai", card => 20 - get.value(card))
+            .forResult();
+        event.result = { bool: result?.bool };
+    },
+    async content(event, trigger, player) {
+        await player.recover(1);
+    },
+    skill_id: "hfhy_juejing",
+    _priority: 0,
+},
+"hfhy_huaiyou": {
+    audio: ["longhun1.mp3", "longhun2.mp3"],
+    mod: {
+        maxHandcard(player, num) {
+            return Math.floor(player.countMark("hfhy_gudan") / 2);
+        },
+    },
+    group: ["hfhy_huaiyou_draw"],
+    subSkill: {
+        draw: {
+            audio: ["longhun1.mp3", "longhun2.mp3"],
+            forced: true,
+            trigger: { player: "phaseDrawBegin1" },
+            filter(event, player) {
+                const x = Math.floor(player.countMark("hfhy_gudan") / 2);
+                return x > 2 && !event.numFixed;
+            },
+            async content(event, trigger, player) {
+                const x = Math.floor(player.countMark("hfhy_gudan") / 2);
+                trigger.num += x - 2;
+            },
+            sub: true,
+            sourceSkill: "hfhy_huaiyou",
+            skill_id: "hfhy_huaiyou_draw",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_huaiyou",
+    _priority: 0,
+},
+"hfhy_powei": {
+    audio: ["jixi1.mp3", "jixi2.mp3"],
+    enable: "phaseUse",
+    usable: 1,
+    filter(event, player) {
+        return player.countCards("he") > 0;
+    },
+    async content(event, trigger, player) {
+        const result = await player.chooseToDiscard("he", [1, player.countCards("he")], true, "破围：弃置任意张牌")
+            .set("ai", card => 5 - get.value(card))
+            .forResult();
+        if (!result.bool || !result.cards?.length) return;
+        const num = result.cards.length;
+        const { control } = await player.chooseControl(["选项一", "选项二", "选项三", "选项四"])
+            .set("choiceList", [
+                "获得等量的【杀】",
+                "获得等量的【闪】",
+                "获得等量的黑色牌",
+                "获得等量的红色牌",
+            ])
+            .set("prompt", `破围：获得${num}张牌`)
+            .set("ai", () => {
+                const me = get.player();
+                const hasEnemy = game.hasPlayer(current => current != me && get.attitude(me, current) < 0 && current.isIn());
+                // 有敌人优先拿杀进攻；残血偏红（桃闪占比高）；否则按手牌缺啥补啥
+                if (hasEnemy && me.hp > 2) return "选项一";
+                if (hasEnemy && me.hp <= 2) return "选项四";
+                if (!hasEnemy) return "选项四";
+                return "选项二";
+            })
+            .forResult();
+        let filterFn;
+        if (control == "选项一") filterFn = card => card.name == "sha";
+        else if (control == "选项二") filterFn = card => card.name == "shan";
+        else if (control == "选项三") filterFn = card => get.color(card) == "black";
+        else filterFn = card => get.color(card) == "red";
+        // 从牌堆顶按顺序取，不足则从弃牌堆顶补
+        const gained = [];
+        for (const card of Array.from(ui.cardPile.childNodes)) {
+            if (gained.length >= num) break;
+            if (filterFn(card)) gained.push(card);
+        }
+        if (gained.length < num) {
+            for (const card of Array.from(ui.discardPile.childNodes)) {
+                if (gained.length >= num) break;
+                if (filterFn(card) && !gained.includes(card)) gained.push(card);
+            }
+        }
+        if (gained.length) {
+            await player.gain(gained, "gain2");
+            player.addGaintag(gained, "hfhy_powei_free");
+        }
+    },
+    group: ["hfhy_powei_free"],
+    subSkill: {
+        free: {
+            charlotte: true,
+            mod: {
+                targetInRange(card) {
+                    // 破围获得的牌本身，以及经龙胆等转换、底层为破围牌的虚牌，均无距离限制
+                    if (card.hasGaintag("hfhy_powei_free")) return true;
+                    if (card.cards && card.cards.some(c => c.hasGaintag && c.hasGaintag("hfhy_powei_free"))) return true;
+                },
+            },
+            sub: true,
+            sourceSkill: "hfhy_powei",
+            skill_id: "hfhy_powei_free",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_powei",
+    _priority: 0,
+},
 };
 export { skills };
 
