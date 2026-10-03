@@ -37,7 +37,7 @@ else
 fi
 
 # 3. 提交 + tag
-git add -A
+git add -A -- . ":(exclude)_changelog.tmp"
 git commit -m "${MSG}" || echo "（无改动，跳过提交）"
 git tag -f "v${VER}" >/dev/null
 echo "[3/8] 已提交并打 tag v${VER}"
@@ -71,7 +71,7 @@ RELEASE_ID=$(curl -s -H "Authorization: token $(printf 'protocol=https\nhost=git
   --data-binary @_rel_payload.json \
   https://api.github.com/repos/shibaiderman096/noname-extension-hufenghuanyu/releases \
   | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(j.id||'FAIL:'+(j.message||s.slice(0,200)))})")
-rm -f _rel_payload.json _rel_body.tmp
+rm -f _rel_payload.json _rel_body.tmp _changelog.tmp
 [ "$RELEASE_ID" != "${RELEASE_ID#FAIL:}" ] && { echo "建 Release 失败: $RELEASE_ID"; exit 1; }
 echo "[6/8] Release 已创建 (id=${RELEASE_ID})"
 
