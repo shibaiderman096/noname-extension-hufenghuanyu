@@ -321,6 +321,7 @@ const skills = {
     "hfhy_xiaoju": {
         audio:["zili_re_zhonghui1.mp3","zili_re_zhonghui2.mp3","zili1.mp3","zili2.mp3"],
         initGroup: "wei",
+        derivation: "hfhy_pini",
         forced: true,
         juexingji: true,
         unique: true,
@@ -374,6 +375,7 @@ const skills = {
     "hfhy_choufa": {
         audio:["requanji1.mp3","requanji2.mp3"],
         groupSkill: "wei",
+        derivation: ["hfhy_jueshi", "hfhy_shanbing", "hfhy_zhengu"],
         forced: true,
         mark: true,
         marktext: "势",
@@ -1066,6 +1068,7 @@ groupSkill: "qun",
 "hfhy_guihan": {
     audio:["sbxieji1.mp3","sbxieji2.mp3","sbxieji3.mp3"],
     limited: true,
+    derivation: "paoxiao",
     skillAnimation: true,
     animationColor: "orange",
     trigger: { player: "phaseZhunbeiBegin" },
@@ -1136,6 +1139,14 @@ groupSkill: "qun",
     subSkill: {
         yang: {
             enable: ["chooseToUse", "chooseToRespond"],
+            // 无懈响应窗口只对 hasWuxie() 为真的玩家开启：声明 hiddenCard 让手里无真无懈时也能转换
+            hiddenCard(player, name) {
+                if (name != "wuxie") return false;
+                if (player.getStorage("hfhy_mzgl_bagua", false)) return false;
+                if (!player.countCards("h")) return false;
+                const names = player.getStorage("hfhy_mzgl_bagua_names", []);
+                return !names.includes("wuxie");
+            },
             filter(event, player) {
                 // 转换技状态：falsy=阳，truthy=阴（changeZhuanhuanji翻转storage）
                 if (player.getStorage("hfhy_mzgl_bagua", false)) return false;
@@ -1249,6 +1260,7 @@ groupSkill: "qun",
 "hfhy_danqi": {
     audio:["olsbweilin1.mp3","danji1.mp3"],
     initGroup: "wei",
+    derivation: ["hfhy_wusheng_lv2", "hfhy_aogu"],
     dutySkill: true,
     forced: true,
     group:["hfhy_danqi_use1","hfhy_danqi_achieve","hfhy_danqi_fail"],
@@ -1901,6 +1913,7 @@ groupSkill: "qun",
 },
     "hfhy_poshu":{
     audio:["potzaoxian1.mp3","potzaoxian2.mp3"],
+    derivation: "hfhy_jixi",
     limited: true,
     skillAnimation: true,
     animationColor: "ice",
@@ -2780,6 +2793,7 @@ groupSkill: "qun",
 "hfhy_tianli": {
     audio: ["sbhuangtian1.mp3","sbhuangtian2.mp3"],
     enable: "phaseUse",
+    derivation: "hfhy_huangtian",
     limited: true,
     skillAnimation: true,
     animationColor: "soil",
@@ -2876,6 +2890,7 @@ groupSkill: "qun",
 "hfhy_jieying": {
     audio: ["drlt_jieying1.mp3","drlt_jieying2.mp3","drlt_poxi1.mp3","drlt_poxi2.mp3"],
     enable: "phaseUse",
+    derivation: "hfhy_baiqi",
     usable: 1,
     filterTarget(card, player, target) {
         return target != player && (target.countCards("h") > 0 || target.countCards("e") > 0 || target.countCards("j") > 0);
@@ -3283,6 +3298,7 @@ groupSkill: "qun",
 "hfhy_jizhi": {
     audio: ["sbzhiji1.mp3","sbzhiji2.mp3","zhiji1.mp3","zhiji2.mp3"],
     initGroup: "shu",
+    derivation: ["hfhy_jiufa", "hfhy_jueji", "hfhy_kunfen"],
     dutySkill: true,
     enable: "phaseUse",
     usable: 1,
@@ -3777,6 +3793,8 @@ groupSkill: "qun",
     },
 },
 "hfhy_zhongwang": {
+    audio: ["twjielv1.mp3", "twjielv2.mp3"],
+    derivation: ["hfhy_jincui", "hfhy_beifa"],
     forced: true,
     locked: true,
     trigger: { player: "phaseZhunbeiBegin" },
@@ -3831,6 +3849,7 @@ groupSkill: "qun",
 "hfhy_sangu": {
     audio: ["friendzhugelianggongli1.mp3","friendzhugelianggongli2.mp3","friendfangqiu1.mp3","friendfangqiu2.mp3","friendfangqiu3.mp3"],
     initGroup: "qun",
+    derivation: ["hfhy_tianshi", "hfhy_huoji", "hfhy_jincui", "hfhy_beifa"],
     dutySkill: true,
     unique: true,
     forced: true,
@@ -3838,6 +3857,8 @@ groupSkill: "qun",
     subSkill: {
         give: {
             forced: true,
+            // 触发阶段静默（popup:false 抑制引擎自动弹窗+播音），角色实际做出选择后才 logSkill 播一次语音
+            popup: false,
             trigger: { global: "phaseZhunbeiBegin" },
             filter(event, player) {
                 // 使命进行中（仍为群势力）时，每名其他角色的准备阶段触发
@@ -3876,6 +3897,8 @@ groupSkill: "qun",
                     })
                     .forResult();
                 if (control == "cancel2") return;
+                // 做出选择（交牌或失去体力）后播一次三顾语音
+                player.logSkill("hfhy_sangu", current);
                 if (control == "选项一" && current.countCards("he")) {
                     const result = await current.chooseCard("he", true, `三顾：交给${get.translation(player)}一张牌`)
                         .set("ai", card => -get.value(card))
@@ -4199,12 +4222,15 @@ groupSkill: "qun",
         player.storage.hfhy_beifa_used = true;
     },
     // 因北伐获得的牌（gaintag标记）无距离和次数限制
+    // 注意：使用时真牌会被 autoViewAs 包成 VCard 且不拷贝 gaintag，必须同时检查底层牌（官方 oldangxian 同款）
     mod: {
         targetInRange(card) {
             if (card.hasGaintag && card.hasGaintag("hfhy_beifa")) return true;
+            if (card.cards && card.cards.some(c => c.hasGaintag && c.hasGaintag("hfhy_beifa"))) return true;
         },
         cardUsable(card) {
             if (card.hasGaintag && card.hasGaintag("hfhy_beifa")) return Infinity;
+            if (card.cards && card.cards.some(c => c.hasGaintag && c.hasGaintag("hfhy_beifa"))) return Infinity;
         },
     },
     group: ["hfhy_beifa_end"],
