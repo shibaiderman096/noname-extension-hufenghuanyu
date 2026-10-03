@@ -5690,7 +5690,7 @@ groupSkill: "qun",
     _priority: 0,
 },
 "hfhy_tiandu": {
-    audio: ["tiandu1.mp3", "tiandu2.mp3"],
+    audio: ["sbtiandu1.mp3", "sbtiandu2.mp3", "tiandu_re_guojia1.mp3", "tiandu_re_guojia2.mp3"],
     locked: true,
     forced: true,
     // ①判定牌生效后获得之（官方天妒同款时机与过滤）
@@ -5705,7 +5705,7 @@ groupSkill: "qun",
     subSkill: {
         // ②出牌阶段开始时判定，非♥减1点体力上限
         maxhp: {
-            audio: ["tiandu1.mp3", "tiandu2.mp3"],
+            audio: ["sbtiandu1.mp3", "sbtiandu2.mp3", "tiandu_re_guojia1.mp3", "tiandu_re_guojia2.mp3"],
             forced: true,
             trigger: { player: "phaseUseBegin" },
             async content(event, trigger, player) {
@@ -5844,7 +5844,7 @@ groupSkill: "qun",
     },
 },
 "hfhy_yiji": {
-    audio: ["yiji1.mp3", "yiji2.mp3"],
+    audio: ["reyiji1.mp3", "reyiji2.mp3", "reyiji_yj_sb_guojia1.mp3", "reyiji_yj_sb_guojia2.mp3"],
     forced: true,
     trigger: { player: "damageEnd" },
     filter(event, player) {
@@ -5910,8 +5910,8 @@ groupSkill: "qun",
 const cards = {
     // 「破釜沉舟」锦囊：对距离1的所有其他角色使用；濒死时视为桃（官方酒的 savable + dying 分流范式）
     "hfhy_pofuchenzhou": {
-        // 卡牌音效：playCardAudio 只认字符串，ext:扩展名:后缀 → 播放 扩展根目录/卡名_male|female.mp3
-        audio: "ext:呼风唤雨:mp3",
+        // 卡牌音效：playCardAudio 只认字符串，ext:扩展名/audio:后缀 → 播放 扩展audio目录/卡名_male|female.mp3
+        audio: "ext:呼风唤雨/audio:mp3",
         image: "ext:呼风唤雨/image/hfhy_pofuchenzhou.png",
         fullskin: true,
         type: "trick",

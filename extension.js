@@ -204,7 +204,7 @@ export default function(){
                 maxHp: 4,
                 skills: ["hfhy_tiandu","hfhy_shisheng","hfhy_yiji"],
                 img: "extension/呼风唤雨/image/ming_guojia.png",
-                dieAudios: ["sb_guojia.mp3", "re_guojia.mp3"],
+                dieAudios: ["guojia.mp3"],
             },
 
         },
