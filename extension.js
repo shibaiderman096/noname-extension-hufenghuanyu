@@ -1,5 +1,5 @@
 import { lib, game, ui, get, ai, _status } from "noname";
-import { skills } from "./skill.js";
+import { skills, cards } from "./skill.js";
 import dynamicTranslates from "./dynamicTranslates.js"
 export const type = "extension";
 export default function(){
@@ -191,11 +191,20 @@ export default function(){
             "po_zhaoyun": {
                 sex: "male",
                 group: "shu",
-                hp: 2,
+                hp: 3,
                 maxHp: 3,
                 skills: ["hfhy_gudan"],
                 img: "extension/呼风唤雨/image/po_zhaoyun.jpg",
                 dieAudios: ["sb_zhaoyun.mp3"],
+            },
+            "ming_guojia": {
+                sex: "male",
+                group: "wei",
+                hp: 3,
+                maxHp: 4,
+                skills: ["hfhy_tiandu","hfhy_shisheng","hfhy_yiji"],
+                img: "extension/呼风唤雨/image/ming_guojia.png",
+                dieAudios: ["sb_guojia.mp3", "re_guojia.mp3"],
             },
 
         },
@@ -218,12 +227,14 @@ export default function(){
 			"yong_huangyueying": "勇黄月英",
 			"po_huanggai": "魄黄盖",
 			"po_zhaoyun": "魄赵云",
+			"ming_guojia": "命郭嘉",
         },
     },
     card: {
-        card: {
-        },
+        card: { ...cards },
         translate: {
+            "hfhy_pofuchenzhou": "破釜沉舟",
+            "hfhy_pofuchenzhou_info": "出牌阶段，对所有与你距离为1的其他角色使用。若其打出【杀】，其弃置一张牌；若其打出【闪】，其受到1点伤害；若其未打出牌，跳过其下一个摸牌阶段。当你进入濒死状态时，此牌可视为【桃】使用。",
         },
         list: [],
     },
@@ -372,6 +383,13 @@ export default function(){
             "hfhy_huaiyou_info": "你的手牌上限为X；摸牌阶段，你多摸X-2张牌（X为你拥有的“胆”标记数量的一半向下取整）。",
             "hfhy_powei": "破围",
             "hfhy_powei_info": "出牌阶段限一次，你可以弃置任意张牌，然后选择一项：1.获得等量的【杀】；2.获得等量的【闪】；3.获得等量的黑色牌；4.获得等量的红色牌。以此法获得的牌无距离限制。",
+            "hfhy_tiandu": "天妒",
+            "hfhy_tiandu_info": "锁定技。当你的判定牌生效后，你获得此牌。出牌阶段开始时，你进行一次判定，若结果不是♥，你减少一点体力上限。",
+            "hfhy_shisheng": "十胜",
+            "hfhy_shisheng_info": "①出牌阶段，你选择此阶段还未选择过的一名其他角色与其拼点，若你输你受到一点伤害，反之你令其失去一个技能直到其下个回合结束时。②当你进行拼点时，你可以进行一次判定，若为红色，你的点数视为K；若为黑色，对方点数视为A。",
+            "hfhy_shisheng_block": "技能失效",
+            "hfhy_yiji": "遗计",
+            "hfhy_yiji_info": "当你受到1点伤害后，你令一名角色获得一张【破釜沉舟】。",
         },
    },
    dynamicTranslates:{ ...dynamicTranslates },

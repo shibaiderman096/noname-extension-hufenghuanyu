@@ -4241,9 +4241,9 @@ groupSkill: "qun",
     },
     async content(event, trigger, player) {
         const target = trigger.target;
-        
-        if (!target.hasSkill("fengyin")) {
-            target.addTempSkill("fengyin");
+
+        if (!target.hasSkill("hfhy_tieji_blocker")) {
+            target.addTempSkill("hfhy_tieji_blocker", "phaseAfter");
         }
         
         const canBeishui = player.maxHp > 1;
@@ -5689,6 +5689,290 @@ groupSkill: "qun",
     skill_id: "hfhy_powei",
     _priority: 0,
 },
+"hfhy_tiandu": {
+    audio: ["tiandu1.mp3", "tiandu2.mp3"],
+    locked: true,
+    forced: true,
+    // ①判定牌生效后获得之（官方天妒同款时机与过滤）
+    trigger: { player: "judgeEnd" },
+    filter(event, player) {
+        return event.result?.card && get.position(event.result.card, true) === "o";
+    },
+    async content(event, trigger, player) {
+        await player.gain(trigger.result.card, "gain2");
+    },
+    group: ["hfhy_tiandu_maxhp"],
+    subSkill: {
+        // ②出牌阶段开始时判定，非♥减1点体力上限
+        maxhp: {
+            audio: ["tiandu1.mp3", "tiandu2.mp3"],
+            forced: true,
+            trigger: { player: "phaseUseBegin" },
+            async content(event, trigger, player) {
+                const result = await player.judge().forResult();
+                if (result && result.suit != "heart") {
+                    await player.loseMaxHp();
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_tiandu",
+            skill_id: "hfhy_tiandu_maxhp",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_tiandu",
+    _priority: 0,
+},
+"hfhy_shisheng": {
+    audio: ["shishengshibai.mp3"],
+    enable: "phaseUse",
+    filter(event, player) {
+        if (!player.countCards("h")) return false;
+        return game.hasPlayer(target => {
+            return target != player && target.isIn() && target.countCards("h") > 0 &&
+                !player.getStorage("hfhy_shisheng_targets", []).includes(target);
+        });
+    },
+    filterTarget(card, player, target) {
+        return target != player && target.isIn() && target.countCards("h") > 0 &&
+            !player.getStorage("hfhy_shisheng_targets", []).includes(target);
+    },
+    init(player, skill) {
+        if (!Array.isArray(player.storage.hfhy_shisheng_targets)) {
+            player.storage.hfhy_shisheng_targets = [];
+        }
+    },
+    async content(event, trigger, player) {
+        const target = event.target;
+        player.storage.hfhy_shisheng_targets.push(target);
+        const result = await player.chooseToCompare(target).forResult();
+        if (result.bool || result.tie) {
+            // 拼点不输（赢或平局）：令其失去一个技能直到其下个回合结束时
+            const result2 = await player.chooseSkill(target, "十胜：令其失去一个技能直到其下个回合结束时")
+                .set("func", (info, skill) => {
+                    if (!info) return false;
+                    if (info.charlotte || info.locked || info.persevereSkill) return false;
+                    return true;
+                })
+                .forResult();
+            const chosen = result2?.skill;
+            if (chosen && lib.skill[chosen]) {
+                target.addTempSkill("hfhy_shisheng_block", { player: "phaseAfter" });
+                target.storage.hfhy_shisheng_block = chosen;
+                game.log(player, "令", target, "失去了技能", "#g【" + get.translation(chosen) + "】");
+            }
+        } else {
+            // 拼点输：受到1点伤害
+            await player.damage();
+        }
+    },
+    group: ["hfhy_shisheng_judge", "hfhy_shisheng_reset"],
+    subSkill: {
+        // ②拼点时判定：红色你的点数视为K，黑色对方点数视为A（官方君刘永 jun_zhiyang_number 同款改点）
+        judge: {
+            audio: ["shishengshibai.mp3"],
+            trigger: {
+                player: "compare",
+                target: "compare",
+            },
+            check() {
+                return true;
+            },
+            async content(event, trigger, player) {
+                const result = await player.judge().forResult();
+                if (!result) return;
+                const iAmInitiator = trigger.player == player;
+                if (result.color == "red") {
+                    game.log(player, "的拼点牌点数视为", "#yK");
+                    if (iAmInitiator) trigger.num1 = 13;
+                    else trigger.num2 = 13;
+                } else {
+                    game.log(player, "的对方拼点牌点数视为", "#yA");
+                    if (iAmInitiator) trigger.num2 = 1;
+                    else trigger.num1 = 1;
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_shisheng",
+            skill_id: "hfhy_shisheng_judge",
+            _priority: 0,
+        },
+        // 每个出牌阶段重置已拼点名单
+        reset: {
+            charlotte: true,
+            firstDo: true,
+            forced: true,
+            popup: false,
+            trigger: { player: "phaseUseBegin" },
+            async content(event, trigger, player) {
+                player.storage.hfhy_shisheng_targets = [];
+            },
+            sub: true,
+            sourceSkill: "hfhy_shisheng",
+            skill_id: "hfhy_shisheng_reset",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_shisheng",
+    _priority: 0,
+},
+// 「失去一个技能」的封锁载体：挂在目标身上，skillBlocker 只放行被封的那一个
+"hfhy_shisheng_block": {
+    charlotte: true,
+    init(player, skill) {
+        player.addSkillBlocker(skill);
+        player.addTip(skill, "技能失效");
+    },
+    onremove(player, skill) {
+        player.removeSkillBlocker(skill);
+        player.removeTip(skill);
+        delete player.storage.hfhy_shisheng_block;
+    },
+    skillBlocker(skill, player) {
+        const blocked = player.getStorage("hfhy_shisheng_block");
+        if (!blocked || skill !== blocked) return false;
+        const info = lib.skill[skill];
+        return info && !info.charlotte && !info.locked && !info.persevereSkill;
+    },
+    mark: true,
+    marktext: "封",
+    intro: {
+        content(storage, player) {
+            const blocked = player.getStorage("hfhy_shisheng_block");
+            return blocked ? `【${get.translation(blocked)}】失效直到其下个回合结束` : "技能失效";
+        },
+    },
+},
+"hfhy_yiji": {
+    audio: ["yiji1.mp3", "yiji2.mp3"],
+    forced: true,
+    trigger: { player: "damageEnd" },
+    filter(event, player) {
+        return event.num > 0;
+    },
+    async content(event, trigger, player) {
+        const num = trigger.num || 1;
+        const suits = ["spade", "heart", "club", "diamond"];
+        for (let i = 0; i < num; i++) {
+            const result = await player.chooseTarget("遗计：令一名角色获得一张【破釜沉舟】", true)
+                .set("ai", target => {
+                    const me = get.player();
+                    if (target == me) return me.hp <= 3 ? 6 : 2;
+                    return get.attitude(me, target) > 0 ? 4 : -1;
+                })
+                .forResult();
+            if (!result.bool || !result.targets?.length) break;
+            const target = result.targets[0];
+            const card = game.createCard("hfhy_pofuchenzhou", suits[Math.floor(Math.random() * suits.length)], 13);
+            await target.gain(card, "gain2");
+        }
+    },
+    skill_id: "hfhy_yiji",
+    _priority: 0,
+},
+// 破釜沉舟跳过摸牌阶段的可见标记
+"hfhy_pofuchenzhou_skip": {
+    charlotte: true,
+    mark: true,
+    marktext: "釜",
+    intro: {
+        content: "其下一个摸牌阶段将被跳过",
+    },
+},
+// 铁骑专用「非锁定技失效」：官方 fengyin 受 get.is.locked 影响不锁 forced 触发技/mod 技，
+// 此封锁器只豁免显式标注锁定（locked）与被动 mod 技（踏浪/怀幼等真锁定技），其余可锁
+"hfhy_tieji_blocker": {
+    charlotte: true,
+    init(player, skill) {
+        player.addSkillBlocker(skill);
+        player.addTip(skill, "非锁定技失效");
+    },
+    onremove(player, skill) {
+        player.removeSkillBlocker(skill);
+        player.removeTip(skill);
+    },
+    skillBlocker(skill, player) {
+        const info = lib.skill[skill];
+        if (!info) return false;
+        if (info.persevereSkill || info.charlotte) return false;
+        if (info.locked || info.mod) return false;
+        return true;
+    },
+    mark: true,
+    intro: {
+        content(storage, player, skill) {
+            const list = player.getSkills(null, false, false).filter(i => lib.skill.hfhy_tieji_blocker.skillBlocker(i, player));
+            return list.length ? "失效技能：" + get.translation(list) : "无失效技能";
+        },
+    },
+},
 };
-export { skills };
+const cards = {
+    // 「破釜沉舟」锦囊：对距离1的所有其他角色使用；濒死时视为桃（官方酒的 savable + dying 分流范式）
+    "hfhy_pofuchenzhou": {
+        // 卡牌音效：playCardAudio 只认字符串，ext:扩展名:后缀 → 播放 扩展根目录/卡名_male|female.mp3
+        audio: "ext:呼风唤雨:mp3",
+        image: "ext:呼风唤雨/image/hfhy_pofuchenzhou.png",
+        fullskin: true,
+        type: "trick",
+        enable: true,
+        selectTarget: -1,
+        reverseOrder: true,
+        filterTarget(card, player, target) {
+            if (_status.event.type == "dying") {
+                return target === player;
+            }
+            return target != player && get.distance(player, target) == 1;
+        },
+        savable(card, player, dying) {
+            return dying === player;
+        },
+        async content(event, trigger, player) {
+            // 濒死时视为桃
+            if (event.getParent(2).type === "dying") {
+                await player.recover();
+                return;
+            }
+            const target = event.target;
+            if (!target.isIn()) return;
+            const result = await target.chooseToRespond()
+                .set("filterCard", card => (card.name == "sha" || card.name == "shan") && lib.filter.cardRespondable(card, target))
+                .set("prompt", "破釜沉舟：请打出【杀】或【闪】")
+                .set("ai", card => {
+                    const me = get.player();
+                    // 打出杀只需多弃一张牌，最划算；打出闪要挨1点伤害；什么都不打只跳过摸牌阶段
+                    if (card.name == "sha") return 6 - get.value(card);
+                    if (card.name == "shan") return (me.hp > 2 ? 3 : -1) - get.value(card);
+                    return -1;
+                })
+                .forResult();
+            if (result.bool && result.cards?.length) {
+                if (result.cards[0].name == "sha") {
+                    if (target.countCards("he") > 0) {
+                        await target.chooseToDiscard("he", true, "破釜沉舟：弃置一张牌")
+                            .set("ai", card => 5 - get.value(card))
+                            .forResult();
+                    }
+                } else {
+                    await target.damage(1, player);
+                }
+            } else {
+                target.skip("phaseDraw");
+                target.addTempSkill("hfhy_pofuchenzhou_skip", { player: ["phaseDrawBegin", "phaseAfter"] });
+                game.log(target, "的下一个摸牌阶段被跳过");
+            }
+        },
+        ai: {
+            order: 6,
+            useful: 4.5,
+            value: 6,
+            tag: {
+                save: 1,
+                damage: 1,
+                discard: 1,
+            },
+        },
+    },
+};
+export { skills, cards };
 
