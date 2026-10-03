@@ -5767,6 +5767,23 @@ groupSkill: "qun",
         }
     },
     group: ["hfhy_shisheng_judge", "hfhy_shisheng_reset"],
+    ai: {
+        order: 6.5,
+        result: {
+            player(player) {
+                // 残血拼不起；手牌里有高点数牌（J以上）时更敢拼
+                if (player.hp <= 1) return 0;
+                const hasHigh = player.getCards("h").some(card => get.number(card) >= 11);
+                return hasHigh ? 1 : 0.6;
+            },
+            target(player, target) {
+                // 只拼敌人；敌方残血时收益更低（技能少且输了也无所谓）
+                if (get.attitude(player, target) >= 0) return 0;
+                if (target.hp <= 1) return -2;
+                return -1.5;
+            },
+        },
+    },
     subSkill: {
         // ②拼点时判定：红色你的点数视为K，黑色对方点数视为A（官方君刘永 jun_zhiyang_number 同款改点）
         judge: {
@@ -5857,8 +5874,10 @@ groupSkill: "qun",
             const result = await player.chooseTarget("遗计：令一名角色获得一张【破釜沉舟】", true)
                 .set("ai", target => {
                     const me = get.player();
+                    // 残血优先自留（濒死当桃保命），其次给队友
                     if (target == me) return me.hp <= 3 ? 6 : 2;
-                    return get.attitude(me, target) > 0 ? 4 : -1;
+                    if (get.attitude(me, target) <= 0) return -1;
+                    return 4 - target.hp * 0.2;
                 })
                 .forResult();
             if (!result.bool || !result.targets?.length) break;
@@ -5866,6 +5885,40 @@ groupSkill: "qun",
             const card = game.createCard("hfhy_pofuchenzhou", suits[Math.floor(Math.random() * suits.length)], 13);
             await target.gain(card, "gain2");
         }
+    },
+    ai: {
+        // 官方遗计同款：打郭嘉等于送他"破釜沉舟"，敌方 AI 伤害意愿打折
+        maixie: true,
+        maixie_hp: true,
+        effect: {
+            target(card, player, target) {
+                if (get.tag(card, "damage")) {
+                    if (player.hasSkillTag("jueqing", false, target)) {
+                        return [1, -2];
+                    }
+                    if (!target.hasFriend()) {
+                        return;
+                    }
+                    let num = 1;
+                    if (get.attitude(player, target) > 0) {
+                        if (player.needsToDiscard()) {
+                            num = 0.7;
+                        } else {
+                            num = 0.5;
+                        }
+                    }
+                    if (target.hp >= 4) {
+                        return [1, num * 2];
+                    }
+                    if (target.hp == 3) {
+                        return [1, num * 1.5];
+                    }
+                    if (target.hp == 2) {
+                        return [1, num];
+                    }
+                }
+            },
+        },
     },
     skill_id: "hfhy_yiji",
     _priority: 0,
@@ -5907,72 +5960,4 @@ groupSkill: "qun",
     },
 },
 };
-const cards = {
-    // 「破釜沉舟」锦囊：对距离1的所有其他角色使用；濒死时视为桃（官方酒的 savable + dying 分流范式）
-    "hfhy_pofuchenzhou": {
-        // 卡牌音效：playCardAudio 只认字符串，ext:扩展名/audio:后缀 → 播放 扩展audio目录/卡名_male|female.mp3
-        audio: "ext:呼风唤雨/audio:mp3",
-        image: "ext:呼风唤雨/image/hfhy_pofuchenzhou.png",
-        fullskin: true,
-        type: "trick",
-        enable: true,
-        selectTarget: -1,
-        reverseOrder: true,
-        filterTarget(card, player, target) {
-            if (_status.event.type == "dying") {
-                return target === player;
-            }
-            return target != player && get.distance(player, target) == 1;
-        },
-        savable(card, player, dying) {
-            return dying === player;
-        },
-        async content(event, trigger, player) {
-            // 濒死时视为桃
-            if (event.getParent(2).type === "dying") {
-                await player.recover();
-                return;
-            }
-            const target = event.target;
-            if (!target.isIn()) return;
-            const result = await target.chooseToRespond()
-                .set("filterCard", card => (card.name == "sha" || card.name == "shan") && lib.filter.cardRespondable(card, target))
-                .set("prompt", "破釜沉舟：请打出【杀】或【闪】")
-                .set("ai", card => {
-                    const me = get.player();
-                    // 打出杀只需多弃一张牌，最划算；打出闪要挨1点伤害；什么都不打只跳过摸牌阶段
-                    if (card.name == "sha") return 6 - get.value(card);
-                    if (card.name == "shan") return (me.hp > 2 ? 3 : -1) - get.value(card);
-                    return -1;
-                })
-                .forResult();
-            if (result.bool && result.cards?.length) {
-                if (result.cards[0].name == "sha") {
-                    if (target.countCards("he") > 0) {
-                        await target.chooseToDiscard("he", true, "破釜沉舟：弃置一张牌")
-                            .set("ai", card => 5 - get.value(card))
-                            .forResult();
-                    }
-                } else {
-                    await target.damage(1, player);
-                }
-            } else {
-                target.skip("phaseDraw");
-                target.addTempSkill("hfhy_pofuchenzhou_skip", { player: ["phaseDrawBegin", "phaseAfter"] });
-                game.log(target, "的下一个摸牌阶段被跳过");
-            }
-        },
-        ai: {
-            order: 6,
-            useful: 4.5,
-            value: 6,
-            tag: {
-                save: 1,
-                damage: 1,
-                discard: 1,
-            },
-        },
-    },
-};
-export { skills, cards };
-
+export { skills };

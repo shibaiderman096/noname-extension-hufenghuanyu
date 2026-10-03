@@ -1,5 +1,6 @@
 import { lib, game, ui, get, ai, _status } from "noname";
-import { skills, cards } from "./skill.js";
+import { skills } from "./skill.js";
+import { cards } from "./card.js";
 import dynamicTranslates from "./dynamicTranslates.js"
 export const type = "extension";
 export default function(){
@@ -234,7 +235,7 @@ export default function(){
         card: { ...cards },
         translate: {
             "hfhy_pofuchenzhou": "破釜沉舟",
-            "hfhy_pofuchenzhou_info": "出牌阶段，对所有与你距离为1的其他角色使用。若其打出【杀】，其弃置一张牌；若其打出【闪】，其受到1点伤害；若其未打出牌，跳过其下一个摸牌阶段。当你进入濒死状态时，此牌可视为【桃】使用。",
+            "hfhy_pofuchenzhou_info": `出牌阶段，对所有与你距离为1的其他角色使用。若其打出${get.poptip("sha")}，其弃置一张牌；若其打出${get.poptip("shan")}，其受到1点伤害；若其未打出牌，跳过其下一个摸牌阶段。当你进入濒死状态时，此牌可视为${get.poptip("tao")}使用。`,
         },
         list: [],
     },
@@ -276,7 +277,7 @@ export default function(){
             "hfhy_wandi":"万敌",
             "hfhy_wandi_info":"蜀势力技。当你使用【杀】造成伤害时，你可以移去一张「资」令此伤害+1。",
             "hfhy_mzgl_bagua":"八卦",
-            "hfhy_mzgl_bagua_info":"转换技。阳：当你需要使用或打出一张基本牌或锦囊牌时，你可以将一张手牌当做一张【八卦】未记录的基本牌或锦囊牌名使用，然后记录此牌名。阴：当你成为其他角色使用牌的目标时，若此牌名未被【八卦】记录，你可以记录此牌名，然后令此牌无效并摸一张牌。",
+            "hfhy_mzgl_bagua_info":`转换技。阳：当你需要使用或打出一张基本牌或锦囊牌时，你可以将一张手牌当做一张${get.poptip("hfhy_mzgl_bagua")}未记录的基本牌或锦囊牌名使用，然后记录此牌名。阴：当你成为其他角色使用牌的目标时，若此牌名未被${get.poptip("hfhy_mzgl_bagua")}记录，你可以记录此牌名，然后令此牌无效并摸一张牌。`,
             "hfhy_danqi":"单骑",
             "hfhy_danqi_info":`使命技，你的登场势力为魏，摸牌阶段开始时，你选择一名其他角色，然后选择一项：1.获得其区域内的一张牌。2.对其使用【杀】无距离限制。背水：你减少一点体力上限。成功：当你杀死一名角色后，你升级技能${get.poptip("hfhy_wusheng_lv2")}，将你的势力变更为蜀，并获得${get.poptip("hfhy_aogu")}。失败：当你进入濒死状态时，你增加一点体力上限并恢复一点体力。`,
             "hfhy_zhanjiang":"斩将",
@@ -340,7 +341,7 @@ export default function(){
 			"hfhy_gu": "顾",
 			"hfhy_gu_info": "三顾使命中获得的燃料标记。",
 			"hfhy_zhongwang": "众望",
-			"hfhy_zhongwang_info": "锁定技。准备阶段，若场上没有\"顾\"标记，你失去所有技能，然后获得【尽瘁】和【北伐】。拥有\"顾\"标记的角色，根据其\"顾\"标记数量获得以下效果：1枚，手牌上限+1；2枚，摸牌阶段多摸一张牌；3枚，出牌阶段使用【杀】的次数上限+1。",
+			"hfhy_zhongwang_info": `锁定技。准备阶段，若场上没有\"顾\"标记，你失去所有技能，然后获得${get.poptip("hfhy_jincui")}和${get.poptip("hfhy_beifa")}。拥有\"顾\"标记的角色，根据其\"顾\"标记数量获得以下效果：1枚，手牌上限+1；2枚，摸牌阶段多摸一张牌；3枚，出牌阶段使用【杀】的次数上限+1。`,
 			"hfhy_sangu": "三顾",
 			"hfhy_sangu_info": `使命技，你的登场势力为群，每名其他角色的准备阶段，其可以选择一项：1.交给你一张牌。2.失去一点体力，你恢复一点体力。然后其获得一枚"顾"标记。成功：准备阶段，若场上的"顾"标记不少于3你将势力变更为蜀，然后你失去技能${get.poptip("hfhy_mzgl_bagua")}，获得${get.poptip("hfhy_tianshi")}和${get.poptip("hfhy_huoji")}。失败：成功达成使命前，拥有"顾"标记的角色死亡。你失去技能${get.poptip("hfhy_mzgl_bagua")}并获得${get.poptip("hfhy_jincui")}和${get.poptip("hfhy_beifa")}。`,
 			"hfhy_tianshi": "天时",
@@ -350,7 +351,7 @@ export default function(){
 			"hfhy_jincui": "尽瘁",
 			"hfhy_jincui_info": "锁定技。准备阶段，你失去一点体力并摸两张牌。当你进入濒死状态时，你减少一点体力上限。",
 			"hfhy_beifa": "北伐",
-			"hfhy_beifa_info": "出牌阶段限一次，你可以观看牌堆顶x张牌，选择一项：1.获得其中的锦囊牌。2.获得其中的基本牌。背水：你减少一点体力上限。你因【北伐】获得的牌无距离和次数限制。若你本回合发动了一次【北伐】，结束阶段你减少一点体力上限并执行一个额外回合。x为你的体力上限。",
+            "hfhy_beifa_info": `出牌阶段限一次，你可以观看牌堆顶x张牌，选择一项：1.获得其中的锦囊牌。2.获得其中的基本牌。背水：你减少一点体力上限。你因${get.poptip("hfhy_beifa")}获得的牌无距离和次数限制。若你本回合发动了一次${get.poptip("hfhy_beifa")}，结束阶段你减少一点体力上限并执行一个额外回合。x为你的体力上限。`,
 			"hfhy_muxiong": "暮雄",
 			"hfhy_muxiong_info": "锁定技。你于游戏的前两个准备阶段增加一点体力上限;之后的准备阶段扣减一点体力上限。你的攻击距离视为x。当你使用【杀】指定目标时，若其攻击距离小于你此【杀】不可响应;若其体力值不小于你的攻击距离，你令此伤害加x，若其因此进入濒死状态，你减少一点体力上限，然后此阶段你使用牌不能选择其他角色为目标（x为你体力上限的一半向下取整）。",
 			"hfhy_dingjun": "定军",
@@ -366,13 +367,13 @@ export default function(){
             "hfhy_zhaxiang": "诈降",
             "hfhy_zhaxiang_info": "当你失去体力后，你令一名其他角色获得一枚“降”标记。当拥有“降”标记的角色受到伤害时，你选择一项：1.失去1点体力；2.获得其一张手牌，然后移去其一枚“降”标记。根据其“降”标记数量，你获得以下效果：1枚，你对其使用牌无距离限制；2枚及以上，其手牌上限-1。",
             "hfhy_jiang": "降",
-            "hfhy_jiang_info": "诈降授予的负面标记：1枚时使用者对其使用牌无距离限制；2枚及以上手牌上限-1。",
+            "hfhy_jiang_info": `${get.poptip("hfhy_zhaxiang")}授予的负面标记：1枚时使用者对其使用牌无距离限制；2枚及以上手牌上限-1。`,
             "hfhy_fenqu": "焚躯",
-            "hfhy_fenqu_info": "觉醒技，锁定技。当你进入濒死状态时，若场上存在“降”标记，你获得〖破阵〗，令你和拥有“降”标记的角色进入连环状态，然后移去场上所有“降”标记，并失去〖苦肉〗和〖诈降〗。",
+            "hfhy_fenqu_info": `觉醒技，锁定技。当你进入濒死状态时，若场上存在“降”标记，你获得${get.poptip("hfhy_pozhen")}，令你和拥有“降”标记的角色进入连环状态，然后移去场上所有“降”标记，并失去${get.poptip("hfhy_kurou")}和${get.poptip("hfhy_zhaxiang")}。`,
             "hfhy_pozhen": "破阵",
             "hfhy_pozhen_info": "限定技。出牌阶段，你可以选择一名角色（可以是你自己），展示其手牌，然后你从双方的手牌中选择花色相同的牌（每种花色双方至少各选一张），双方各弃置所选的牌，对其造成X点火焰伤害（X为弃置的花色数）。对你自己发动时，只弃置你选择的你自己的牌。",
             "hfhy_gudan": "孤胆",
-            "hfhy_gudan_info": "当你使用或打出基本牌、进入或脱离濒死状态、造成或受到伤害时，你获得一个“胆”标记。你根据“胆”的数量视为拥有如下技能：2枚，【龙胆】；6枚，【绝境】；10枚，【怀幼】；14枚，【破围】。",
+            "hfhy_gudan_info": `当你使用或打出基本牌、进入或脱离濒死状态、造成或受到伤害时，你获得一个“胆”标记。你根据“胆”的数量视为拥有如下技能：2枚，${get.poptip("hfhy_longdan")}；6枚，${get.poptip("hfhy_juejing")}；10枚，${get.poptip("hfhy_huaiyou")}；14枚，${get.poptip("hfhy_powei")}。`,
             "hfhy_longdan": "龙胆",
             "hfhy_longdan_info": "你可以将一张【杀】当【闪】、【闪】当【杀】使用或打出，以此法转换的牌不计入次数限制。",
             "hfhy_longdan_sha": "龙胆",
@@ -389,7 +390,7 @@ export default function(){
             "hfhy_shisheng_info": "①出牌阶段，你选择此阶段还未选择过的一名其他角色与其拼点，若你输你受到一点伤害，反之你令其失去一个技能直到其下个回合结束时。②当你进行拼点时，你可以进行一次判定，若为红色，你的点数视为K；若为黑色，对方点数视为A。",
             "hfhy_shisheng_block": "技能失效",
             "hfhy_yiji": "遗计",
-            "hfhy_yiji_info": "当你受到1点伤害后，你令一名角色获得一张【破釜沉舟】。",
+            "hfhy_yiji_info": `当你受到1点伤害后，你令一名角色获得一张${get.poptip("hfhy_pofuchenzhou")}。`,
         },
    },
    dynamicTranslates:{ ...dynamicTranslates },
