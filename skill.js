@@ -4426,22 +4426,24 @@ groupSkill: "qun",
     usable: 1,
     filter(event, player) {
         if (player.group != "qun") return false;
-        return game.hasPlayer(current =>
-            current != player &&
-            current.group === "qun" &&
-            current.countCards("he") > 0
-        );
+        return game.hasPlayer(current => current != player && current.group === "qun");
     },
     filterTarget(card, player, target) {
-        return target != player && target.group === "qun" && target.countCards("he") > 0;
+        return target != player && target.group === "qun";
     },
     selectTarget: 1,
     async content(event, trigger, player) {
         const target = event.targets[0];
+        // 没有手牌：直接增加1点体力上限，不再询问
+        if (!target.countCards("h")) {
+            game.log(target, "没有手牌，", player, "增加1点体力上限");
+            await player.gainMaxHp();
+            return;
+        }
         // 非强制chooseCard：目标自主决定是否交牌（AI在最佳分值≤0时拒绝）
         const result = await target.chooseCard(
-            "he",
-            `羌助：是否将一张牌交给${get.translation(player)}？若不交，其增加1点体力上限`
+            "h",
+            `羌助：是否将一张手牌交给${get.translation(player)}？若不交，其增加1点体力上限`
         ).set("ai", card => {
             if (get.attitude(target, player) < 0) return -1;
             return 9 - get.value(card);
@@ -5560,6 +5562,10 @@ groupSkill: "qun",
         sha: {
             audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
             enable: ["chooseToUse", "chooseToRespond"],
+            // 硬门槛：必须已解锁龙胆（孤胆≥2授予），防止任何候选路径在未解锁时漏出
+            filter(event, player) {
+                return player.hasSkill("hfhy_longdan");
+            },
             filterCard: { name: "shan" },
             position: "hs",
             viewAs: { name: "sha", storage: { hfhy_longdan_convert: true } },
@@ -5589,6 +5595,9 @@ groupSkill: "qun",
         shan: {
             audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
             enable: ["chooseToUse", "chooseToRespond"],
+            filter(event, player) {
+                return player.hasSkill("hfhy_longdan");
+            },
             filterCard: { name: "sha" },
             position: "hs",
             viewAs: { name: "shan", storage: { hfhy_longdan_convert: true } },

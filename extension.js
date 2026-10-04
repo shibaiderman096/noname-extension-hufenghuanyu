@@ -1,8 +1,57 @@
 import { lib, game, ui, get, ai, _status } from "noname";
 import { skills } from "./skill.js";
 import { cards } from "./card.js";
-import changelogHtml from "./changelog.js";
+import { changelog, changelogLatest } from "./changelog.js";
 import dynamicTranslates from "./dynamicTranslates.js"
+
+const REPO_URL = "https://github.com/shibaiderman096/noname-extension-hufenghuanyu";
+// 用系统默认浏览器打开链接：Electron 的 window.open 会开内嵌窗口，须走 shell.openExternal；
+// 多级回退：@electron/remote → electron remote → child_process start → game.open
+function openExternal(url) {
+    const getRequire = () => {
+        try {
+            if (typeof require === "function") return require;
+        } catch (e) {}
+        return window.require || globalThis.require || null;
+    };
+    const candidates = ["@electron/remote", "electron"];
+    for (const name of candidates) {
+        try {
+            const req = getRequire();
+            if (!req) break;
+            const remote = req(name);
+            const shell = remote && (remote.shell || (remote.default && remote.default.shell));
+            if (shell && typeof shell.openExternal === "function") {
+                shell.openExternal(url);
+                return;
+            }
+        } catch (e) {}
+    }
+    try {
+        const req = getRequire();
+        if (req) {
+            const cp = req("child_process");
+            if (cp && typeof cp.exec === "function") {
+                cp.exec(`start "" "${url}"`);
+                return;
+            }
+        }
+    } catch (e) {}
+    game.open(url);
+}
+// 版本号比较：返回 1(a>b) / -1(a<b) / 0
+function compareVersion(a, b) {
+    const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+        const x = pa[i] || 0, y = pb[i] || 0;
+        if (x > y) return 1;
+        if (x < y) return -1;
+    }
+    return 0;
+}
+function getCurrentVersion() {
+    return (lib.extensionPack["呼风唤雨"] || lib.extensionPack["extension_呼风唤雨"] || {}).version || "1.0";
+}
 export const type = "extension";
 export default function(){
 	return {name:"呼风唤雨",editable:false,connect:false,arenaReady:function(){
@@ -33,6 +82,23 @@ export default function(){
         ["1_ming_jiangwei", ["ext:/呼风唤雨/image/1_ming_jiangwei.png", ""]],
     ];
 	},help:{},config:{
+    "版本号": {
+        name: "当前版本：v" + getCurrentVersion(),
+        clear: true,
+        nopointer: true,
+        onclick() {
+            return false;
+        },
+    },
+    "最新更新": {
+        // clear 条目支持 HTML：展示最新一版的更新摘要（由 _gen_changelog.cjs 自动生成）
+        name: changelogLatest,
+        clear: true,
+        nopointer: true,
+        onclick() {
+            return false;
+        },
+    },
     "更新日志": {
         name: "更新日志",
         clear: true,
@@ -41,7 +107,7 @@ export default function(){
             if (ui.changelogPanel) {
                 ui.changelogPanel.remove();
             }
-            const panel = ui.create.div(".dialog.static", changelogHtml);
+            const panel = ui.create.div(".dialog.static", changelog);
             panel.style.cssText += ";position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,86%);max-height:72%;overflow-y:auto;z-index:9999;";
             const close = ui.create.div(".menubutton.large", "关闭", panel);
             close.style.cssText += ";position:sticky;top:4px;float:right;margin-right:6px;";
@@ -54,6 +120,56 @@ export default function(){
             ui.window.appendChild(panel);
             ui.changelogPanel = panel;
             // 返回 false 防止菜单项开关状态闪烁
+            return false;
+        },
+    },
+    "检查更新": {
+        name: "检查更新",
+        clear: true,
+        intro: "联网检查 GitHub 上的最新版本",
+        onclick() {
+            const current = getCurrentVersion();
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open("GET", "https://api.github.com/repos/shibaiderman096/noname-extension-hufenghuanyu/releases/latest");
+                xhr.onload = () => {
+                    try {
+                        const info = JSON.parse(xhr.responseText);
+                        const tag = (info.tag_name || "").replace(/^v/, "");
+                        if (!tag) {
+                            alert("检查更新失败：未获取到版本信息");
+                            return;
+                        }
+                        const cmp = compareVersion(tag, current);
+                        if (cmp > 0) {
+                            if (confirm(`发现新版本 v${tag}（当前 v${current}），是否打开发布页下载？`)) {
+                                openExternal(info.html_url || REPO_URL + "/releases/latest");
+                            }
+                        } else if (cmp === 0) {
+                            alert(`当前已是最新版本 v${current}`);
+                        } else {
+                            alert(`当前版本 v${current} 比线上 v${tag} 更新`);
+                        }
+                    } catch (e) {
+                        alert("检查更新失败：无法解析版本信息");
+                    }
+                };
+                xhr.onerror = () => alert("检查更新失败：无法连接 GitHub（可能需要网络代理）");
+                xhr.send();
+            } catch (e) {
+                alert("检查更新失败：" + e.message);
+            }
+            return false;
+        },
+    },
+    "仓库地址": {
+        // clear 条目的显示文本即 name：提示点击跳转浏览器，完整链接放悬停提示
+        name: "仓库地址（点击跳转）",
+        clear: true,
+        nopointer: false,
+        intro: REPO_URL,
+        onclick() {
+            openExternal(REPO_URL);
             return false;
         },
     },
@@ -357,7 +473,7 @@ export default function(){
 			"hfhy_mashu": "马术",
 			"hfhy_mashu_info": "锁定技。你计算与其他角色的距离-X。每轮限一次，当你造成伤害时，若你与其的距离为1，你失去一点体力，然后令此伤害+1。（X为与你同势力的角色数一半向下取整）",
 			"hfhy_qiangzhu": "羌助",
-			"hfhy_qiangzhu_info": "群势力技。出牌阶段限一次，你可以令一名群势力角色选择是否交给你一张牌，你于此阶段使用与该牌同名的牌无次数限制。否则你增加一点体力上限。",
+            "hfhy_qiangzhu_info": "群势力技。出牌阶段限一次，你可以令一名群势力角色选择是否交给你一张手牌，你于此阶段使用与该牌同名的牌无次数限制；若其没有手牌或拒绝交牌，你增加1点体力上限。",
 			"hfhy_xuechou": "血仇",
 			"hfhy_xuechou_info": "蜀势力技。准备阶段，你可以弃置一张手牌，然后令一名角色获得一个“仇”标记;当其受到伤害时，移去一个“仇”，然后你增加一点体力上限。",
 			"hfhy_qiaosi": "巧思",
@@ -424,6 +540,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.0",
+    version: "1.5.6",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };

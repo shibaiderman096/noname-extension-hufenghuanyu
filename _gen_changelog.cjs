@@ -29,5 +29,25 @@ for (const raw of lines.slice(start)) {
 }
 if (inList) html += '</ul>';
 html += '</div>';
-fs.writeFileSync('changelog.js', 'const changelog = ' + JSON.stringify(html) + ';\nexport default changelog;\n');
-console.log('changelog.js generated, len', html.length);
+// 最新一版小节（扩展入口页面展示）：加粗标题 + 每条一行，<br> 分隔
+const latestLines = [];
+let started = false;
+for (const raw of lines.slice(start)) {
+  const line = raw.trim();
+  if (!line || line === '---') continue;
+  if (line.startsWith('## ')) {
+    if (started) break;
+    started = true;
+    latestLines.push('<b style="color:#e8c46a">' + esc(line.slice(3)) + '</b>');
+  } else if (started && line.startsWith('- ')) {
+    latestLines.push('· ' + esc(line.slice(2)).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'));
+  } else if (started && line.startsWith('**')) {
+    latestLines.push('<b>' + esc(line.replace(/\*\*/g, '')) + '</b>');
+  }
+}
+const latestHtml = latestLines.join('<br>');
+fs.writeFileSync('changelog.js',
+  'const changelog = ' + JSON.stringify(html) + ';\n' +
+  'const changelogLatest = ' + JSON.stringify(latestHtml) + ';\n' +
+  'export { changelog, changelogLatest };\n');
+console.log('changelog.js generated, len', html.length, '| latest len', latestHtml.length);

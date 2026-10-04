@@ -17,7 +17,8 @@ ZIP="../hufenghuanyu-v${VER}.zip"
 
 # 1. 版本号
 sed -i "s/\"version\":\"[^\"]*\"}/\"version\":\"${VER}\"}/" info.json
-echo "[1/8] info.json -> ${VER}"
+sed -i 's/    version: "[^"]*",/    version: "'"${VER}"'",/' extension.js
+echo "[1/8] info.json + extension.js -> ${VER}"
 # 同步 README 信息表中的当前版本单元格
 sed -i "s/当前版本 | [^|]*/当前版本 | **v${VER}** /" README.md
 
