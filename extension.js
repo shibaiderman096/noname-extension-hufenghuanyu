@@ -83,7 +83,10 @@ export default function(){
     ];
 	},help:{},config:{
     "版本号": {
-        name: "当前版本：v" + getCurrentVersion(),
+        // getter 延迟求值：模块加载时 lib.extensionPack 尚未注册，直接拼接会显示兜底的 1.0
+        get name() {
+            return "当前版本：v" + getCurrentVersion();
+        },
         clear: true,
         nopointer: true,
         onclick() {
@@ -540,6 +543,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.5.6",
+    version: "1.5.7",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };
