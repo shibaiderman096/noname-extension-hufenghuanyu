@@ -5201,7 +5201,7 @@ groupSkill: "qun",
         const result = await player.chooseTarget("诈降：令一名其他角色获得一枚“降”标记", true)
             .set("filterTarget", (card, player2, target) => target != player && target.isIn())
             .set("ai", target => {
-                // "降"是负面标记：优先给敌人，已带标记的叠到2枚激活手牌上限-1，残血敌人优先
+                // "降"是负面标记：优先给敌人，已带标记的叠到3枚激活受伤+1，残血敌人优先
                 if (get.attitude(player, target) >= 0) return -1;
                 let score = 3;
                 if (target.countMark("hfhy_jiang") > 0) score += 1;
@@ -5213,17 +5213,50 @@ groupSkill: "qun",
         const target = result.targets[0];
         target.addMark("hfhy_jiang", 1, false);
         target.markSkill("hfhy_jiang");
-        target.addSkill("hfhy_zhaxiang_aura");
     },
-    group: ["hfhy_zhaxiang_choose"],
+    group: ["hfhy_zhaxiang_choose", "hfhy_zhaxiang_direct", "hfhy_zhaxiang_damage"],
     subSkill: {
-        // ②当拥有"降"标记的角色受到伤害时，二选一
+        // ③效果二（≥2枚"降"）：对其使用的牌无法被响应（directHit）
+        direct: {
+            audio: ["zhaxiang1.mp3", "zhaxiang2.mp3"],
+            forced: true,
+            trigger: { player: "useCardToPlayered" },
+            filter(event, player) {
+                return event.target != player && event.target.countMark("hfhy_jiang") >= 2;
+            },
+            logTarget: "target",
+            async content(event, trigger, player) {
+                trigger.getParent().directHit.push(trigger.target);
+            },
+            sub: true,
+            sourceSkill: "hfhy_zhaxiang",
+            skill_id: "hfhy_zhaxiang_direct",
+            _priority: 0,
+        },
+        // ③效果三（≥3枚"降"）：其受到你造成的伤害+1
+        damage: {
+            audio: ["zhaxiang1.mp3", "zhaxiang2.mp3"],
+            forced: true,
+            trigger: { source: "damageBegin1" },
+            filter(event, player) {
+                return event.player != player && event.player.countMark("hfhy_jiang") >= 3;
+            },
+            logTarget: "player",
+            async content(event, trigger, player) {
+                trigger.num++;
+            },
+            sub: true,
+            sourceSkill: "hfhy_zhaxiang",
+            skill_id: "hfhy_zhaxiang_damage",
+            _priority: 0,
+        },
+        // ②当拥有"降"标记的角色受到伤害后，二选一
         choose: {
             audio: ["zhaxiang1.mp3", "zhaxiang2.mp3"],
             forced: true,
-            trigger: { global: "damageBegin1" },
+            trigger: { global: "damageAfter" },
             filter(event, player) {
-                return event.player != player && event.player.countMark("hfhy_jiang") > 0;
+                return event.num > 0 && event.player.isIn() && event.player != player && event.player.countMark("hfhy_jiang") > 0;
             },
             logTarget: "player",
             async content(event, trigger, player) {
@@ -5257,19 +5290,6 @@ groupSkill: "qun",
             sub: true,
             sourceSkill: "hfhy_zhaxiang",
             skill_id: "hfhy_zhaxiang_choose",
-            _priority: 0,
-        },
-        // ③效果二（≥2枚"降"）：光环挂被标记角色身上，手牌上限-1
-        aura: {
-            charlotte: true,
-            mod: {
-                maxHandcard(player, num) {
-                    if (player.countMark("hfhy_jiang") >= 2) return num - 1;
-                },
-            },
-            sub: true,
-            sourceSkill: "hfhy_zhaxiang",
-            skill_id: "hfhy_zhaxiang_aura",
             _priority: 0,
         },
     },
@@ -5306,9 +5326,17 @@ groupSkill: "qun",
         for (const target of marked) {
             if (target.isIn()) await target.link(true);
         }
+        let removed = 0;
         for (const current of game.filterPlayer()) {
             const count = current.countMark("hfhy_jiang");
-            if (count > 0) current.removeMark("hfhy_jiang", count, false);
+            if (count > 0) {
+                current.removeMark("hfhy_jiang", count, false);
+                removed += count;
+            }
+        }
+        // 每移除一枚"降"标记回复1点体力（濒死时机，可自救）
+        if (removed > 0) {
+            await player.recover(removed);
         }
         await player.removeSkills(["hfhy_kurou", "hfhy_zhaxiang"]);
     },
