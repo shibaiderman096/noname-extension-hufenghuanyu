@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 呼风唤雨 一键发版脚本
 # 用法: ./release.sh <版本号> <提交信息> [更新日志文件]
-#   - 更新日志文件为可选的 markdown 正文（不含 "### vX（日期）" 标题，脚本自动生成标题）；
-#     提供时会被插入 README.md 的「## 更新日志」之后，并附进 GitHub Release 正文。
-# 流程: 改版本号 → 写 README → 提交 → 打 tag → git archive 打包 → 推送(自动重试) → 建 Release → 传资产 → 删本地 zip
+#   - 更新日志文件为可选的 markdown 正文（不含 "## vX（日期）" 标题，脚本自动生成标题）；
+#     提供时会被插入 CHANGELOG.md 顶部，并附进 GitHub Release 正文。
+# 流程: 改版本号 → 写 CHANGELOG → 提交 → 打 tag → git archive 打包 → 推送(自动重试) → 建 Release → 传资产 → 删本地 zip
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -18,22 +18,27 @@ ZIP="../hufenghuanyu-v${VER}.zip"
 # 1. 版本号
 sed -i "s/\"version\":\"[^\"]*\"}/\"version\":\"${VER}\"}/" info.json
 echo "[1/8] info.json -> ${VER}"
+# 同步 README 信息表中的当前版本单元格
+sed -i "s/当前版本 | [^|]*/当前版本 | **v${VER}** /" README.md
 
-# 2. README 更新日志
+# 2. CHANGELOG 更新日志
 if [ -n "$CHANGELOG_FILE" ] && [ -f "$CHANGELOG_FILE" ]; then
   node -e "
     const fs = require('fs');
-    const readme = fs.readFileSync('README.md', 'utf8');
+    const src = 'CHANGELOG.md';
+    const source = fs.readFileSync(src, 'utf8');
     const body = fs.readFileSync('${CHANGELOG_FILE}', 'utf8').trim();
-    const section = \`### v${VER}（${TODAY}）\n\n\${body}\n\n\`;
-    const anchor = '## 更新日志\n';
-    const idx = readme.indexOf(anchor);
-    if (idx < 0) { console.error('README 缺少「## 更新日志」'); process.exit(1); }
-    fs.writeFileSync('README.md', readme.slice(0, idx + anchor.length) + '\n' + section + readme.slice(idx + anchor.length).replace(/^\n+/, ''));
+    const section = \`## v${VER}（${TODAY}）\n\n\${body}\n\n\`;
+    const lines = source.split('\n');
+    const idx = lines.findIndex(line => /^##\s+v/.test(line));
+    if (idx < 0) { console.error('CHANGELOG.md 缺少版本小节（## vX.Y.Z）'); process.exit(1); }
+    const head = lines.slice(0, idx).join('\n').replace(/\n+$/, '');
+    fs.writeFileSync(src, head + '\n\n' + section + lines.slice(idx).join('\n'));
   "
-  echo "[2/8] README 已插入 v${VER} 日志"
+  node _gen_changelog.cjs
+  echo "[2/8] CHANGELOG.md 已插入 v${VER} 日志，changelog.js 已重新生成"
 else
-  echo "[2/8] 无更新日志文件，跳过 README"
+  echo "[2/8] 无更新日志文件，跳过 CHANGELOG"
 fi
 
 # 3. 提交 + tag

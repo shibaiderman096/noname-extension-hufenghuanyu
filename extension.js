@@ -1,10 +1,11 @@
 import { lib, game, ui, get, ai, _status } from "noname";
 import { skills } from "./skill.js";
 import { cards } from "./card.js";
+import changelogHtml from "./changelog.js";
 import dynamicTranslates from "./dynamicTranslates.js"
 export const type = "extension";
 export default function(){
-	return {name:"呼风唤雨",editable:true,connect:false,arenaReady:function(){
+	return {name:"呼风唤雨",editable:false,connect:false,arenaReady:function(){
 
 	},content:function(config,pack){
             Object.assign(lib.dynamicTranslate, dynamicTranslates);
@@ -31,7 +32,32 @@ export default function(){
         lib.characterSubstitute["ming_jiangwei"] = [
         ["1_ming_jiangwei", ["ext:/呼风唤雨/image/1_ming_jiangwei.png", ""]],
     ];
-	},help:{},config:{},package:{
+	},help:{},config:{
+    "更新日志": {
+        name: "更新日志",
+        clear: true,
+        intro: "查看历次版本更新内容",
+        onclick() {
+            if (ui.changelogPanel) {
+                ui.changelogPanel.remove();
+            }
+            const panel = ui.create.div(".dialog.static", changelogHtml);
+            panel.style.cssText += ";position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,86%);max-height:72%;overflow-y:auto;z-index:9999;";
+            const close = ui.create.div(".menubutton.large", "关闭", panel);
+            close.style.cssText += ";position:sticky;top:4px;float:right;margin-right:6px;";
+            close.onclick = () => panel.remove();
+            panel.onclick = e => {
+                if (e.target === panel) {
+                    panel.remove();
+                }
+            };
+            ui.window.appendChild(panel);
+            ui.changelogPanel = panel;
+            // 返回 false 防止菜单项开关状态闪烁
+            return false;
+        },
+    },
+},package:{
     character: {
         character: {
             "kuang_dongzhuo": {
@@ -192,7 +218,7 @@ export default function(){
             "po_zhaoyun": {
                 sex: "male",
                 group: "shu",
-                hp: 3,
+                hp: 2,
                 maxHp: 3,
                 skills: ["hfhy_gudan"],
                 img: "extension/呼风唤雨/image/po_zhaoyun.jpg",

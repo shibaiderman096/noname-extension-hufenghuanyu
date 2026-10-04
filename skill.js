@@ -1307,6 +1307,8 @@ groupSkill: "qun",
         
         const control = controlResult.control;
         const isBeishui = control === "背水！";
+        // direct:true 静默触发，实际发动（选定目标并做出选择）后才弹技能名并播语音
+        player.logSkill("hfhy_danqi", target);
         
         if ((control === "选项一" || isBeishui) && target.countGainableCards(player, "hej") > 0) {
             await player.gainPlayerCard(target, true, "hej");
@@ -1892,12 +1894,12 @@ groupSkill: "qun",
             },
             mod: {
                 ignoredHandcard(card, player) {
-                    if (card.hasGaintag("hfhy_tuntian")) {
+                    if (typeof card.hasGaintag == "function" && card.hasGaintag("hfhy_tuntian")) {
                         return true;
                     }
                 },
                 cardDiscardable(card, player, name) {
-                    if (name == "phaseDiscard" && card.hasGaintag("hfhy_tuntian")) {
+                    if (name == "phaseDiscard" && typeof card.hasGaintag == "function" && card.hasGaintag("hfhy_tuntian")) {
                         return false;
                     }
                 },
@@ -3460,10 +3462,10 @@ groupSkill: "qun",
         nolimit: {
             mod: {
                 ignoredHandcard(card, player) {
-                    if (card.hasGaintag("hfhy_jizhi")) return true;
+                    if (typeof card.hasGaintag == "function" && card.hasGaintag("hfhy_jizhi")) return true;
                 },
                 cardDiscardable(card, player, name) {
-                    if (name == "phaseDiscard" && card.hasGaintag("hfhy_jizhi")) return false;
+                    if (name == "phaseDiscard" && typeof card.hasGaintag == "function" && card.hasGaintag("hfhy_jizhi")) return false;
                 },
             },
             sub: true,
@@ -4225,12 +4227,14 @@ groupSkill: "qun",
     // 注意：使用时真牌会被 autoViewAs 包成 VCard 且不拷贝 gaintag，必须同时检查底层牌（官方 oldangxian 同款）
     mod: {
         targetInRange(card) {
-            if (card.hasGaintag && card.hasGaintag("hfhy_beifa")) return true;
-            if (card.cards && card.cards.some(c => c.hasGaintag && c.hasGaintag("hfhy_beifa"))) return true;
+            const hasTag = (c, tag) => c && typeof c.hasGaintag == "function" && c.hasGaintag(tag);
+            if (hasTag(card, "hfhy_beifa")) return true;
+            if (card.cards && card.cards.some(c => hasTag(c, "hfhy_beifa"))) return true;
         },
         cardUsable(card) {
-            if (card.hasGaintag && card.hasGaintag("hfhy_beifa")) return Infinity;
-            if (card.cards && card.cards.some(c => c.hasGaintag && c.hasGaintag("hfhy_beifa"))) return Infinity;
+            const hasTag = (c, tag) => c && typeof c.hasGaintag == "function" && c.hasGaintag(tag);
+            if (hasTag(card, "hfhy_beifa")) return Infinity;
+            if (card.cards && card.cards.some(c => hasTag(c, "hfhy_beifa"))) return Infinity;
         },
     },
     group: ["hfhy_beifa_end"],
@@ -5493,6 +5497,8 @@ groupSkill: "qun",
         return true;
     },
     async content(event, trigger, player) {
+        // popup:false 抑制自动弹窗/记录，但每次触发仍播一次龙胆系语音
+        game.trySkillAudio("hfhy_gudan", player, true);
         player.addMark("hfhy_gudan", 1, false);
         player.markSkill("hfhy_gudan");
         const n = player.countMark("hfhy_gudan");
@@ -5702,8 +5708,10 @@ groupSkill: "qun",
             mod: {
                 targetInRange(card) {
                     // 破围获得的牌本身，以及经龙胆等转换、底层为破围牌的虚牌，均无距离限制
-                    if (card.hasGaintag("hfhy_powei_free")) return true;
-                    if (card.cards && card.cards.some(c => c.hasGaintag && c.hasGaintag("hfhy_powei_free"))) return true;
+                    // hasGaintag 需 typeof 判断：某些包装对象上它存在但不是函数
+                    const hasTag = (c, tag) => c && typeof c.hasGaintag == "function" && c.hasGaintag(tag);
+                    if (hasTag(card, "hfhy_powei_free")) return true;
+                    if (card.cards && card.cards.some(c => hasTag(c, "hfhy_powei_free"))) return true;
                 },
             },
             sub: true,
