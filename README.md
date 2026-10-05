@@ -5,10 +5,12 @@
 | 项目 | 说明 |
 |---|---|
 | 当前版本 | **v1.6** |
-| 运行环境 | 无名杀（libnoname）1.10+ |
+| 运行环境 | [无名杀 / libnoname](https://github.com/nonamekill/noname) 1.10+ |
 | 武将数量 | 19 名（狂 / 商 / 命 / 魄 / 勇 五系） |
 | 专属卡牌 | 1 张（破釜沉舟） |
-| 作者 | 无名玩家 |
+| 作者 | 无名玩家（[shibaiderman096](https://github.com/shibaiderman096)） |
+| 贡献者 | [shibaiderman096](https://github.com/shibaiderman096) · ZCode AI 助手（技能实现与工程化） |
+| 开源协议 | [MIT](LICENSE) |
 | 仓库 | <https://github.com/shibaiderman096/noname-extension-hufenghuanyu> |
 
 **呼风唤雨**是一支以「势力交错」和「标记机制」为核心的无名杀武将扩展。19 名武将分属魏、蜀、吴、群四大势力，其中多数拥有双势力或以登场势力起步、并可在游戏中变更势力；围绕「使命」设计的分岔成长路线让同一个武将在达成或错过使命后走向截然不同的技能组。标记既是资源也是燃料——势、勇、志、顾、仇、险、资……攒与耗之间就是整局的节奏。
@@ -429,5 +431,8 @@ node _gen_changelog.cjs
 ## 致谢与声明
 
 - 立绘、语音等素材版权归原作者与官方所有，本扩展仅作学习交流之用，请勿用于商业用途。
-- 技能设计、实现与素材整理：无名玩家。
+- 游戏本体：[无名杀 nonamekill/noname](https://github.com/nonamekill/noname)（libnoname 引擎），本扩展基于其 1.10+ 版本开发。
+- 技能设计、实现与素材整理：无名玩家（[shibaiderman096](https://github.com/shibaiderman096)）。
+- 技能代码工程化、AI 补全与发版流水线：ZCode AI 助手。
 - 问题反馈与建议欢迎提交 [Issue](https://github.com/shibaiderman096/noname-extension-hufenghuanyu/issues)。
+- 本扩展以 [MIT 协议](LICENSE) 开源。
