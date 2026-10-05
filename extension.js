@@ -132,26 +132,30 @@ export default function(){
         intro: "联网检查 GitHub 上的最新版本",
         onclick() {
             const current = getCurrentVersion();
-            try {
+            const handleTag = tag => {
+                const cmp = compareVersion(tag, current);
+                if (cmp > 0) {
+                    if (confirm(`发现新版本 v${tag}（当前 v${current}），是否打开发布页下载？`)) {
+                        openExternal(`${REPO_URL}/releases/tag/v${tag}`);
+                    }
+                } else if (cmp === 0) {
+                    alert(`当前已是最新版本 v${current}`);
+                } else {
+                    alert(`当前版本 v${current} 比线上 v${tag} 更新`);
+                }
+            };
+            // 第二级：GitHub API（有 60 次/小时的未认证限流，限流时展示其 message）
+            const tryApi = () => {
                 const xhr = new XMLHttpRequest();
-                xhr.open("GET", "https://api.github.com/repos/shibaiderman096/noname-extension-hufenghuanyu/releases/latest");
+                xhr.open("GET", `https://api.github.com/repos/shibaiderman096/noname-extension-hufenghuanyu/releases/latest`);
                 xhr.onload = () => {
                     try {
                         const info = JSON.parse(xhr.responseText);
                         const tag = (info.tag_name || "").replace(/^v/, "");
-                        if (!tag) {
-                            alert("检查更新失败：未获取到版本信息");
-                            return;
-                        }
-                        const cmp = compareVersion(tag, current);
-                        if (cmp > 0) {
-                            if (confirm(`发现新版本 v${tag}（当前 v${current}），是否打开发布页下载？`)) {
-                                openExternal(info.html_url || REPO_URL + "/releases/latest");
-                            }
-                        } else if (cmp === 0) {
-                            alert(`当前已是最新版本 v${current}`);
+                        if (tag) {
+                            handleTag(tag);
                         } else {
-                            alert(`当前版本 v${current} 比线上 v${tag} 更新`);
+                            alert("检查更新失败：" + (info.message || "未获取到版本信息"));
                         }
                     } catch (e) {
                         alert("检查更新失败：无法解析版本信息");
@@ -159,8 +163,24 @@ export default function(){
                 };
                 xhr.onerror = () => alert("检查更新失败：无法连接 GitHub（可能需要网络代理）");
                 xhr.send();
+            };
+            try {
+                // 第一级：releases 页面（无限流），/releases/latest 会 302 到 /releases/tag/vX.Y.Z，
+                // 从最终 URL（responseURL）解析最新版本号；CORS 拦截或异常时退回 API
+                const xhr = new XMLHttpRequest();
+                xhr.open("GET", REPO_URL + "/releases/latest");
+                xhr.onload = () => {
+                    const m = (xhr.responseURL || "").match(/\/releases\/tag\/v?([0-9][0-9.]*)/);
+                    if (m) {
+                        handleTag(m[1]);
+                    } else {
+                        tryApi();
+                    }
+                };
+                xhr.onerror = tryApi;
+                xhr.send();
             } catch (e) {
-                alert("检查更新失败：" + e.message);
+                tryApi();
             }
             return false;
         },
@@ -325,6 +345,15 @@ export default function(){
                 img: "extension/呼风唤雨/image/yong_huangyueying.png",
                 dieAudios: ["sb_huangyueying.mp3"],
             },
+            "yong_xiaoqiao": {
+                sex: "female",
+                group: "wu",
+                hp: 3,
+                maxHp: 3,
+                skills: ["hfhy_guqu","hfhy_tianxiang"],
+                img: "extension/呼风唤雨/image/yong_xiaoqiao.png",
+                dieAudios: ["sb_xiaoqiao.mp3"],
+            },
             "po_huanggai": {
                 sex: "male",
                 group: "wu",
@@ -371,6 +400,7 @@ export default function(){
 			"kuang_huangzhong": "狂黄忠",
 			"shang_caohong": "商曹洪",
 			"yong_huangyueying": "勇黄月英",
+			"yong_xiaoqiao": "勇小乔",
 			"po_huanggai": "魄黄盖",
 			"po_zhaoyun": "魄赵云",
 			"ming_guojia": "命郭嘉",
@@ -483,6 +513,12 @@ export default function(){
 			"hfhy_qiaosi_info": "出牌阶段，每种牌名限一次。当你使用非装备牌结算后，你可以弃置一张与此牌类型相同的手牌，视为使用一张无次数限制的同牌名的牌。",
 			"hfhy_tiangong": "天工",
 			"hfhy_tiangong_info": "出牌阶段开始时，你可以选择一种类型。此阶段你使用与该类型相同的牌时，你摸一张牌；使用类型不同的牌无距离限制。若你此阶段使用过三种类型的牌，结束阶段你可以选择一名角色，将手牌或弃牌堆中的一张装备牌置入其装备区。",
+			"hfhy_guqu": "顾曲",
+			"hfhy_guqu_info": `每轮限一次。首轮开始时或准备阶段，你可以执行${get.poptip("hfhy_xiange")}，此后你每使用或打出一张牌，若该牌的花色与“弦歌合律”相同，你摸一张牌。全部验证完毕后，若本次合律正确的数量多于0，你从牌堆中随机获得一张锦囊牌；多于2，你再从牌堆中随机获得一张装备牌；多于4，你令一名其他角色摸X张牌（X为本次合律成功的数量）且“弦歌合律”的花色数+1。`,
+			"hfhy_xiange": "弦歌合律",
+			"hfhy_xiange_info": "系统随机生成5个花色组成“谱”。此后你每使用或打出一张牌与“谱”中当前比对位相比，无论是否相同，比对位均推进。",
+			"hfhy_tianxiang": "天香",
+			"hfhy_tianxiang_info": "当你使用或打出牌时，你可以改变此牌的花色（每轮每种花色限一次）。",
 			"hfhy_gu": "顾",
 			"hfhy_gu_info": "三顾使命中获得的燃料标记。",
 			"hfhy_zhongwang": "众望",
@@ -543,6 +579,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.5.7",
+    version: "1.6",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };

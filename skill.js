@@ -410,10 +410,10 @@ const skills = {
                 filter(event, player) {
                     return player.group == "wei";
                 },
-                content() {
-                    const gain = trigger.source === trigger.player ? 2 : 1;
-                    player.storage["hfhy_choufa"] = (player.storage["hfhy_choufa"] || 0) + gain;
+                async content(event, trigger, player) {
+                    player.storage["hfhy_choufa"] = (player.storage["hfhy_choufa"] || 0) + 1;
                     player.markSkill("hfhy_choufa");
+                    game.log(player, "获得了1枚“势”标记（", (player.storage["hfhy_choufa"] || 0), "枚）");
                 },
                 sub: true,
                 sourceSkill: "hfhy_choufa",
@@ -6030,5 +6030,184 @@ groupSkill: "qun",
         },
     },
 },
+"hfhy_guqu": {
+    audio: ["potyinhui1.mp3","potyinhui2.mp3","potyinhui3.mp3","potyinhui4.mp3","potyinhui5.mp3","potyinhui6.mp3","potyinhui7.mp3","potyinhui8.mp3","potyinhui9.mp3","potyinhui10.mp3","potyinhui11.mp3","potyinhui12.mp3"],
+    mark: true,
+    marktext: "谱",
+    intro: {
+        content(storage, player) {
+            const pu = player.getStorage("hfhy_guqu_pu", []);
+            if (!pu.length) return "点击「执行弦歌合律」生成花色谱";
+            const pos = player.getStorage("hfhy_guqu_pos", 0);
+            const correct = player.getStorage("hfhy_guqu_correct", 0);
+            const shown = pu.map((s, i) => (i === pos ? "【" + GUQU_SYMBOL[s] + "】" : GUQU_SYMBOL[s])).join(" ");
+            return `谱：${shown}<br>比对位：第${pos + 1}/${pu.length}个｜已中：${correct}`;
+        },
+    },
+    round: 1,
+    // global 触发：首轮开始时无论是否一号位都能收到（friend诸葛亮同款）
+    trigger: { global: ["roundStart", "phaseZhunbeiBegin"] },
+    filter(event, player, triggername) {
+        // 准备阶段只在自己的准备阶段触发；roundStart 全员一次
+        if (triggername == "phaseZhunbeiBegin" && event.player != player) return false;
+        return true;
+    },
+    async cost(event, trigger, player) {
+        event.result = await player.chooseBool("顾曲：是否执行“弦歌合律”？")
+            .set("ai", () => {
+                const me = get.player();
+                // 手牌充足时可配合天香凑花色，优先合律
+                return me.countCards("h") >= 2;
+            })
+            .forResult();
+        if (event.result.bool) event.result.cost_data = "合律";
+    },
+    async content(event, trigger, player) {
+        // 执行弦歌合律——生成长度为 len 的随机花色谱
+        const len = player.getStorage("hfhy_guqu_len", 5);
+        const pu = [];
+        for (let i = 0; i < len; i++) {
+            pu.push(GUQU_SUITS[Math.floor(Math.random() * GUQU_SUITS.length)]);
+        }
+        player.storage.hfhy_guqu_pu = pu;
+        player.storage.hfhy_guqu_pos = 0;
+        player.storage.hfhy_guqu_correct = 0;
+        player.markSkill("hfhy_guqu");
+        game.log(player, "执行了“弦歌合律”，花色谱已生成");
+    },
+    group: ["hfhy_guqu_verify"],
+    subSkill: {
+        // 弦歌合律验证：使用或打出牌（含回合外响应）时与谱当前比对位对比，无论是否相同比对位均推进
+        verify: {
+            audio: ["friendzhugelianggongli1.mp3", "friendzhugelianggongli2.mp3"],
+            forced: true,
+            popup: false,
+            trigger: { player: ["useCard", "respond"] },
+            filter(event, player) {
+                const pu = player.getStorage("hfhy_guqu_pu", []);
+                return pu.length > 0 && player.getStorage("hfhy_guqu_pos", 0) < pu.length;
+            },
+            async content(event, trigger, player) {
+                const pu = player.getStorage("hfhy_guqu_pu", []);
+                const pos = player.getStorage("hfhy_guqu_pos", 0);
+                const suit = get.suit(trigger.card, player);
+                let correct = player.getStorage("hfhy_guqu_correct", 0);
+                if (suit === pu[pos]) {
+                    correct++;
+                    player.popup("合律", "wood");
+                    // 合律成功：立即摸一张牌
+                    await player.draw(1);
+                }
+                player.storage.hfhy_guqu_correct = correct;
+                player.storage.hfhy_guqu_pos = pos + 1;
+                player.markSkill("hfhy_guqu");
+                if (pos + 1 >= pu.length) {
+                    // 全部验证完毕，结算
+                    player.storage.hfhy_guqu_pu = [];
+                    player.storage.hfhy_guqu_pos = 0;
+                    if (correct > 0) {
+                        const trick = guquRandomTyped(player, "trick");
+                        if (trick) await player.gain(trick, "gain2");
+                    }
+                    if (correct > 2) {
+                        const equip = guquRandomTyped(player, "equip");
+                        if (equip) await player.gain(equip, "gain2");
+                    }
+                    if (correct > 4) {
+                        const result = await player.chooseTarget("弦歌合律：令一名其他角色摸" + correct + "张牌", true)
+                            .set("filterTarget", (card, player2, target) => target != player2 && target.isIn())
+                            .set("ai", target => {
+                                const me = get.player();
+                                return get.attitude(me, target) > 0 ? 1 : -1;
+                            })
+                            .forResult();
+                        if (result.bool && result.targets?.length) {
+                            await result.targets[0].draw(correct);
+                        }
+                        // 花色谱长度+1，下次弦歌合律的谱更长
+                        player.storage.hfhy_guqu_len = pu.length + 1;
+                        game.log(player, "的“弦歌合律”花色数增至", pu.length + 1);
+                    }
+                    game.log(player, "的“弦歌合律”验证完毕：", correct + "/" + pu.length, "合律");
+                    player.storage.hfhy_guqu_correct = 0;
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_guqu",
+            skill_id: "hfhy_guqu_verify",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_guqu",
+    _priority: 0,
+},
+"hfhy_tianxiang": {
+    audio: ["potheyun1.mp3", "potheyun2.mp3"],
+    trigger: { player: ["useCardBefore", "respondBefore"] },
+    filter(event, player) {
+        if (!event.card) return false;
+        const used = player.getStorage("hfhy_tianxiang_used", []);
+        const current = get.suit(event.card, player);
+        return GUQU_SUITS.some(suit => suit !== current && !used.includes(suit));
+    },
+    async cost(event, trigger, player) {
+        const used = player.getStorage("hfhy_tianxiang_used", []);
+        const current = get.suit(trigger.card, player);
+        const suitName = { spade: "♠", heart: "♥", club: "♣", diamond: "♦" };
+        const cnName = { spade: "黑桃", heart: "红桃", club: "梅花", diamond: "方片" };
+        const available = GUQU_SUITS.filter(suit => suit !== current && !used.includes(suit));
+        // 谱激活时 AI 改成谱当前比对位的花色；否则不改
+        const pu = player.getStorage("hfhy_guqu_pu", []);
+        const pos = player.getStorage("hfhy_guqu_pos", 0);
+        const desired = pu.length && pos < pu.length ? pu[pos] : null;
+        const { control } = await player.chooseControl(available.map(s => cnName[s]).concat("cancel2"))
+            .set("prompt", "天香：是否改变此牌的花色？")
+            .set("ai", () => {
+                if (desired && desired !== current && available.includes(desired)) return cnName[desired];
+                return "cancel2";
+            })
+            .forResult();
+        if (control == "cancel2") {
+            event.result = { bool: false };
+            return;
+        }
+        const suit = Object.keys(cnName).find(key => cnName[key] === control);
+        event.result = { bool: true, cost_data: suit };
+    },
+    async content(event, trigger, player) {
+        const suit = event.cost_data;
+        if (!suit) return;
+        const used = player.getStorage("hfhy_tianxiang_used", []);
+        used.push(suit);
+        player.storage.hfhy_tianxiang_used = used;
+        trigger.card.suit = suit;
+        trigger.card.color = (suit === "heart" || suit === "diamond") ? "red" : "black";
+        game.log(player, "将", trigger.card, "的花色改为了", "#g" + ({ spade: "黑桃", heart: "红桃", club: "梅花", diamond: "方片" })[suit]);
+    },
+    group: ["hfhy_tianxiang_reset"],
+    subSkill: {
+        reset: {
+            forced: true,
+            popup: false,
+            // global：无论是否一号位，每轮开始都重置改色记录
+            trigger: { global: "roundStart" },
+            async content(event, trigger, player) {
+                player.storage.hfhy_tianxiang_used = [];
+            },
+            sub: true,
+            sourceSkill: "hfhy_tianxiang",
+            skill_id: "hfhy_tianxiang_reset",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_tianxiang",
+    _priority: 0,
+},
 };
+const GUQU_SUITS = ["spade", "heart", "club", "diamond"];
+const GUQU_SYMBOL = { spade: "♠", heart: "♥", club: "♣", diamond: "♦" };
+function guquRandomTyped(player, type) {
+    const pool = Array.from(ui.cardPile.childNodes).sort(() => Math.random() - 0.5);
+    return pool.find(card => get.type(card) === type) || null;
+}
 export { skills };
