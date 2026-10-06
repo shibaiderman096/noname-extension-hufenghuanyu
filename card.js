@@ -102,17 +102,17 @@ const cardSkills = {
             await event.target.changeHujia(1);
         },
         ai: {
-            order: 2,
+            order(item, player) {
+                return player.hp > 1 ? 2 : -1;
+            },
             result: {
                 player(player) {
-                    return player.hp > 1 ? 1 : 0;
+                    return player.hp > 1 ? 1 : -1;
                 },
                 target(player, target) {
                     if (target.hujia >= 5) return 0;
-                    if (target === player) {
-                        return player.hp > 1 ? 1 : 0;
-                    }
-                    return get.attitude(player, target) > 0 ? 1 : -1;
+                    const attitude = target === player ? 1 : get.attitude(player, target);
+                    return Math.max(0, get.threaten(target)) * attitude;
                 },
             },
         },

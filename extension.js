@@ -4,6 +4,53 @@ import { cards, cardSkills } from "./card.js";
 import { changelog, changelogLatest } from "./changelog.js";
 import dynamicTranslates from "./dynamicTranslates.js"
 
+const CHARACTER_PREFIXES = {
+    kuang: "狂",
+    shang: "商",
+    ming: "命",
+    po: "魄",
+    yong: "勇",
+};
+const CHARACTER_NAMES = {
+    kuang_dongzhuo: "董卓",
+    shang_mizhu: "麋竺",
+    kuang_zhonghui: "钟会",
+    shang_zhangfei: "张飞",
+    ming_zhugeliang: "诸葛亮",
+    kuang_guanyu: "关羽",
+    po_dengai: "邓艾",
+    kuang_lvbu: "吕布",
+    ming_zhangjiao: "张角",
+    po_ganning: "甘宁",
+    ming_jiangwei: "姜维",
+    po_machao: "马超",
+    kuang_huangzhong: "黄忠",
+    shang_caohong: "曹洪",
+    yong_huangyueying: "黄月英",
+    yong_xiaoqiao: "小乔",
+    yong_sunshangxiang: "孙尚香",
+    po_huanggai: "黄盖",
+    po_zhaoyun: "赵云",
+    ming_guojia: "郭嘉",
+};
+// 主名与短前缀分离，运行时拼成“狂董卓”并写入 _prefix 供引擎拆分显示
+const characterTranslates = Object.fromEntries(
+    Object.entries(CHARACTER_NAMES).flatMap(([id, name]) => {
+        const prefix = CHARACTER_PREFIXES[id.split("_")[0]];
+        return [
+            [id, prefix + name],
+            [`${id}_prefix`, prefix],
+        ];
+    })
+);
+const CHARACTER_PREFIX_STYLES = {
+    "狂": { color: "#e74c3c" },
+    "商": { color: "#d4af37" },
+    "命": { color: "#4fc3f7" },
+    "魄": { color: "#9b8cff" },
+    "勇": { color: "#35c76f" },
+};
+
 const REPO_URL = "https://github.com/shibaiderman096/noname-extension-hufenghuanyu";
 // 用系统默认浏览器打开链接：Electron 的 window.open 会开内嵌窗口，须走 shell.openExternal；
 // 多级回退：@electron/remote → electron remote → child_process start → game.open
@@ -58,7 +105,9 @@ export default function(){
 
 	},content:function(config,pack){
             Object.assign(lib.dynamicTranslate, dynamicTranslates);
-
+            for (const [prefix, style] of Object.entries(CHARACTER_PREFIX_STYLES)) {
+                lib.namePrefix.set(prefix, style);
+            }
 	},prepare:function(){
 
 	},precontent:function(config){
@@ -396,28 +445,23 @@ export default function(){
             },
 
         },
+        characterSort: {
+            "呼风唤雨": {
+                hfhy_kuang: ["kuang_dongzhuo", "kuang_zhonghui", "kuang_guanyu", "kuang_lvbu", "kuang_huangzhong"],
+                hfhy_shang: ["shang_mizhu", "shang_zhangfei", "shang_caohong"],
+                hfhy_ming: ["ming_zhugeliang", "ming_zhangjiao", "ming_jiangwei", "ming_guojia"],
+                hfhy_po: ["po_dengai", "po_ganning", "po_machao", "po_huanggai", "po_zhaoyun"],
+                hfhy_yong: ["yong_huangyueying", "yong_xiaoqiao", "yong_sunshangxiang"],
+            },
+        },
         translate: {            
             "呼风唤雨": "呼风唤雨",
-            "kuang_dongzhuo": "狂董卓",
-            "shang_mizhu": "商麋竺",
-            "kuang_zhonghui": "狂钟会",
-            "shang_zhangfei":"商张飞",
-            "ming_zhugeliang":"命诸葛亮",
-            "kuang_guanyu":"狂关羽",
-            "po_dengai":"魄邓艾",
-            "kuang_lvbu":"狂吕布",
-            "ming_zhangjiao":"命张角",
-            "po_ganning":"魄甘宁",
-			"ming_jiangwei": "命姜维",
-			"po_machao": "魄马超",
-			"kuang_huangzhong": "狂黄忠",
-			"shang_caohong": "商曹洪",
-			"yong_huangyueying": "勇黄月英",
-			"yong_xiaoqiao": "勇小乔",
-			"yong_sunshangxiang": "勇孙尚香",
-			"po_huanggai": "魄黄盖",
-			"po_zhaoyun": "魄赵云",
-			"ming_guojia": "命郭嘉",
+            "hfhy_kuang": "呼风唤雨·狂",
+            "hfhy_shang": "呼风唤雨·商",
+            "hfhy_ming": "呼风唤雨·命",
+            "hfhy_po": "呼风唤雨·魄",
+            "hfhy_yong": "呼风唤雨·勇",
+            ...characterTranslates,
         },
     },
     card: {
@@ -428,7 +472,7 @@ export default function(){
             "hfhy_pofuchenzhou": "破釜沉舟",
             "hfhy_pofuchenzhou_info": `出牌阶段，对所有与你距离为1的其他角色使用。若其打出${get.poptip("sha")}，其弃置一张牌；若其打出${get.poptip("shan")}，其受到1点伤害；若其未打出牌，跳过其下一个摸牌阶段。当你进入濒死状态时，此牌可视为${get.poptip("tao")}使用。`,
             "hfhy_xueying": "血影挽歌",
-            "hfhy_xueying_info": "装备牌·武器，攻击范围5。出牌阶段限一次，你可以失去一点体力，令一名角色获得一点护甲。回合结束时，你将装备区内的“血影挽歌”置于弃牌堆。",
+            "hfhy_xueying_info": "出牌阶段限一次，你可以失去一点体力，令一名角色获得一点护甲。回合结束时，你将装备区内的“血影挽歌”置于弃牌堆。",
             "hfhy_xueying_skill": "血影挽歌",
             "hfhy_xueying_skill_info": "出牌阶段限一次，你可以失去一点体力，令一名角色获得一点护甲。回合结束时，你将装备区内的“血影挽歌”置于弃牌堆。",
             "hfhy_xueying_discard": "血影挽歌",
@@ -541,7 +585,7 @@ export default function(){
 			"hfhy_tianxiang": "天香",
 			"hfhy_tianxiang_info": "当你使用或打出牌时，你可以改变此牌的花色（每轮每种花色限一次）。",
 			"hfhy_lianyin": "联姻",
-			"hfhy_lianyin_info": `使命技。你的登场势力为吴。游戏开始时，你选择一名其他男性角色。准备阶段，若你或其已受伤，你可以弃置一张手牌令你与其各回复一点体力。成功：你使用“联姻”回复不少于4点体力，将你的势力变更为蜀，增加一点体力上限并回复一点体力，然后修改${get.poptip("hfhy_xiaoji")}。失败：在使命成功前，你或其进入濒死状态，你与其各获得一点护甲，然后你失去${get.poptip("hfhy_xiaoji")}获得${get.poptip("hfhy_jiejiang")}。`,
+			"hfhy_lianyin_info": `使命技。你的登场势力为吴。游戏开始时，你选择一名其他男性角色。准备阶段，若你或其已受伤，你可以弃置一张手牌令你与其各回复一点体力。成功：你与其因“联姻”累计回复不少于4点体力，将你的势力变更为蜀，增加一点体力上限并回复一点体力，然后修改${get.poptip("hfhy_xiaoji")}。失败：在使命成功前，你或其进入濒死状态，你与其各获得一点护甲，然后你失去${get.poptip("hfhy_xiaoji")}获得${get.poptip("hfhy_jiejiang")}。`,
 			"hfhy_xiaoji": "枭姬",
 			"hfhy_xiaoji_info": `转换技。出牌阶段开始时，若你的装备区没有“${get.poptip("hfhy_xueying")}”你获得并使用之；阳：当你于回合内使用一张装备牌后，可以视为你使用了一张无次数限制的【杀】；阴：当你失去装备区里的一张牌时，你可以摸两张牌。`,
 			"hfhy_xiaoji_gai": "枭姬·改",
@@ -608,6 +652,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.7",
+    version: "1.7.1",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };

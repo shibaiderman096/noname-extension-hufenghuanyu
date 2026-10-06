@@ -5542,10 +5542,10 @@ groupSkill: "qun",
         player.markSkill("hfhy_gudan");
         const n = player.countMark("hfhy_gudan");
         const toGain = [];
-        if (n >= 2 && !player.hasSkill("hfhy_longdan")) toGain.push("hfhy_longdan");
-        if (n >= 6 && !player.hasSkill("hfhy_juejing")) toGain.push("hfhy_juejing");
-        if (n >= 10 && !player.hasSkill("hfhy_huaiyou")) toGain.push("hfhy_huaiyou");
-        if (n >= 14 && !player.hasSkill("hfhy_powei")) toGain.push("hfhy_powei");
+        if (n >= 2 && !player.hasSkill("hfhy_longdan", null, null, false)) toGain.push("hfhy_longdan");
+        if (n >= 6 && !player.hasSkill("hfhy_juejing", null, null, false)) toGain.push("hfhy_juejing");
+        if (n >= 10 && !player.hasSkill("hfhy_huaiyou", null, null, false)) toGain.push("hfhy_huaiyou");
+        if (n >= 14 && !player.hasSkill("hfhy_powei", null, null, false)) toGain.push("hfhy_powei");
         if (toGain.length) {
             game.log(player, "获得了技能", "#g【" + toGain.map(name => get.translation(name)).join("】【") + "】");
             await player.addSkills(toGain);
@@ -5558,16 +5558,23 @@ groupSkill: "qun",
 "hfhy_longdan": {
     audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
     // 主技能只做容器：enable/viewAs 全在子技能上，主技能不可被 chooseToUse 选中（否则 setContent(undefined) 崩溃）
-    // 以此法转换的牌不计入次数限制：viewAs 带 storage 标记（VCard 构造时保留，unsure 按钮阶段也在）
-    mod: {
-        cardUsable(card, player, num) {
-            if (card.name == "sha" && card.storage && card.storage.hfhy_longdan_convert) {
-                return Infinity;
-            }
-        },
-    },
-    group: ["hfhy_longdan_sha", "hfhy_longdan_shan"],
+    // mod 必须在子技能上：主技能带 mod 会被判定为锁定技，导致非锁定技失效时绕过限制
+    group: ["hfhy_longdan_unlimited", "hfhy_longdan_sha", "hfhy_longdan_shan"],
     subSkill: {
+        unlimited: {
+            // 以此法转换的牌不计入次数限制：viewAs 带 storage 标记（VCard 构造时保留，unsure 按钮阶段也在）
+            mod: {
+                cardUsable(card, player, num) {
+                    if (card.name == "sha" && card.storage && card.storage.hfhy_longdan_convert) {
+                        return Infinity;
+                    }
+                },
+            },
+            sub: true,
+            sourceSkill: "hfhy_longdan",
+            skill_id: "hfhy_longdan_unlimited",
+            _priority: 0,
+        },
         sha: {
             audio: ["sblongdan1.mp3", "sblongdan2.mp3"],
             enable: ["chooseToUse", "chooseToRespond"],
@@ -6240,7 +6247,7 @@ groupSkill: "qun",
         content(storage, player) {
             const target = guquLianyinTarget(player);
             const rec = player.getStorage("hfhy_lianyin_recover", 0);
-            return (target ? "联姻对象：" + get.translation(target) : "未选择联姻对象") + "<br>联姻累计回复：" + rec + "/4";
+            return (target ? "联姻对象：" + get.translation(target) : "未选择联姻对象") + "<br>联姻双方累计回复：" + rec + "/4";
         },
     },
     derivation: ["hfhy_xiaoji_gai", "hfhy_jiejiang"],
@@ -6252,10 +6259,12 @@ groupSkill: "qun",
     async content(event, trigger, player) {
         // forced 自动触发，由玩家主动选择联姻对象
         const result = await player.chooseTarget("联姻：选择一名其他男性角色", true)
-            .set("filterTarget", (card, player2, target) => target != player2 && target.sex == "male")
+            .set("filterTarget", (card, player2, target) => target != player2 && target.hasSex("male"))
             .set("ai", target => {
-                const att = get.attitude(get.player(), target);
-                return att * 2 + target.hp + 1;
+                const me = get.player();
+                const att = get.attitude(me, target);
+                if (att <= 0) return att;
+                return att * 10 + get.threaten(target) + (target.maxHp - target.hp) * 2;
             })
             .forResult();
         if (result.bool && result.targets?.length) {
@@ -6273,13 +6282,26 @@ groupSkill: "qun",
                 const target = guquLianyinTarget(player);
                 if (!target || !target.isIn()) return false;
                 if (!(player.isDamaged() || target.isDamaged())) return false;
-                return player.countCards("h") > 0;
+                return player.countDiscardableCards(player, "h") > 0;
             },
             logTarget: () => guquLianyinTarget(get.player()),
             async cost(event, trigger, player) {
                 const target = guquLianyinTarget(player);
                 event.result = await player.chooseToDiscard("h", 1, "联姻：是否弃置一张手牌，令你与" + get.translation(target) + "各回复1点体力？")
-                    .set("ai", card => 5 - get.value(card, player))
+                    .set("ai", card => {
+                        const me = get.player();
+                        let benefit = get.recoverEffect(me, me, me);
+                        if (target && target.isIn()) {
+                            benefit += get.recoverEffect(target, me, me);
+                        }
+                        if (me.isDamaged()) {
+                            benefit += 1;
+                            if (me.getStorage("hfhy_lianyin_recover", 0) >= 3) {
+                                benefit += 6;
+                            }
+                        }
+                        return benefit - get.value(card, me);
+                    })
                     .forResult();
             },
             async content(event, trigger, player) {
@@ -6290,6 +6312,7 @@ groupSkill: "qun",
                     await player.recover(1);
                 }
                 if (target && target.isIn() && target.isDamaged()) {
+                    player.storage.hfhy_lianyin_recover = player.getStorage("hfhy_lianyin_recover", 0) + 1;
                     await target.recover(1);
                 }
             },
@@ -6303,11 +6326,12 @@ groupSkill: "qun",
             forced: true,
             skillAnimation: true,
             animationColor: "green",
-            trigger: { player: "recoverAfter" },
+            trigger: { global: "recoverAfter" },
             filter(event, player) {
-                // 联姻使用中的自回复使累计回复达到 4 时达成使命
+                const target = guquLianyinTarget(player);
                 return player.hasSkill("hfhy_xiaoji") &&
                     event.getParent().name == "hfhy_lianyin_use" &&
+                    (event.player == player || event.player == target) &&
                     player.getStorage("hfhy_lianyin_recover", 0) >= 4;
             },
             async content(event, trigger, player) {
@@ -6358,6 +6382,7 @@ groupSkill: "qun",
 "hfhy_xiaoji": {
     audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
     zhuanhuanji: true,
+    forced:true,
     mark: true,
     marktext: "姬",
     intro: {
@@ -6389,6 +6414,7 @@ groupSkill: "qun",
         },
         yang: {
             audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
+            forced:true,
             trigger: { player: "useCardAfter" },
             filter(event, player) {
                 if (player.getStorage("hfhy_xiaoji", false)) return false;
@@ -6397,22 +6423,15 @@ groupSkill: "qun",
                 if (_status.currentPhase != player) return false;
                 return event.card && get.type(event.card) == "equip";
             },
-            async cost(event, trigger, player) {
-                event.result = await player.chooseBool("枭姬：是否视为使用一张无次数限制的【杀】？")
-                    .set("ai", () => {
-                        const me = get.player();
-                        return game.hasPlayer(target => me.canUse({ name: "sha", isCard: true }, target) && get.effect(target, { name: "sha", isCard: true }, me, me) > 0);
-                    })
-                    .forResult();
-            },
             async content(event, trigger, player) {
                 const sha = get.autoViewAs({ name: "sha", isCard: true });
-                const result = await player.chooseTarget("枭姬：选择【杀】的目标", true, (card, player2, target) => player2.canUse(sha, target))
+                const result = await player.chooseTarget("枭姬：是否视为使用一张无次数限制的【杀】？", false, (card, player2, target) => player2.canUse(sha, target))
                     .set("ai", target => get.effect(target, { name: "sha", isCard: true }, get.player(), get.player()))
                     .forResult();
-                if (result.bool && result.targets?.length) {
-                    await player.useCard(get.autoViewAs({ name: "sha" }), result.targets, false);
+                if (!result.bool || !result.targets?.length) {
+                    return;
                 }
+                await player.useCard(get.autoViewAs({ name: "sha" }), result.targets, false);
                 player.changeZhuanhuanji("hfhy_xiaoji");
             },
             sub: true,
