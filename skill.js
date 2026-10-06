@@ -3884,15 +3884,24 @@ groupSkill: "qun",
                         const cheapest = cards.length ? Math.min(...cards.map(card => get.value(card))) : 99;
                         const direStrait = me.hp <= 1 && (cards.length == 0 || cheapest > 4.5);
                         if (att > 0) {
-                            // 队友：高优先帮助使命
+                            // 队友：总是给标记（优先交廉价牌，没牌掉血换）
                             if (cards.length > 0) return "选项一";
                             if (me.hp > 1) return "选项二";
                             return "cancel2";
                         }
-                        // 敌我不明（身份局）/敌对：「顾」对自身有增益，高优先获取——
-                        // 仅自身难保、或面对明确敌人且增益已满（3顾后纯资敌）时放弃
+                        // 对手/未知：酌情——“顾”对自身有光环收益，但绝不能资敌完成使命
+                        const totalGu = game.countPlayer(current => current.countMark("hfhy_gu"));
+                        // 明确敌对且使命临近完成（场上“顾”已有 2 枚）：坚决不给
+                        if (att < 0 && totalGu >= 2) return "cancel2";
+                        // 自身难保
                         if (direStrait) return "cancel2";
-                        if (att < 0 && me.countMark("hfhy_gu") >= 3) return "cancel2";
+                        // 敌对且自己的光环已够用（已有 2 枚）时不再资敌
+                        if (att < 0 && me.countMark("hfhy_gu") >= 2) return "cancel2";
+                        // 有廉价牌就交（换光环收益）
+                        if (cards.length > 0 && cheapest <= 3.5) return "选项一";
+                        // 血量充裕可以掉血换
+                        if (me.hp > 2) return "选项二";
+                        // 中立场合理合作
                         if (cards.length > 0) return "选项一";
                         if (me.hp > 1) return "选项二";
                         return "cancel2";
@@ -5632,25 +5641,41 @@ groupSkill: "qun",
     audio: ["xinjuejing1.mp3", "xinjuejing2.mp3"],
     trigger: { player: "dying" },
     filter(event, player) {
-        return player.countCards("he") >= 2;
+        return player.countCards("h") > 0;
     },
     async cost(event, trigger, player) {
-        const result = await player.chooseToDiscard(2, "he", get.prompt2("hfhy_juejing"))
-            .set("filterCard", (card, cards) => {
-                if (cards.length) return get.suit(card) != get.suit(cards[0]);
-                return true;
+        event.result = await player.chooseToDiscard("h", [1, player.countCards("h")], "绝境：是否弃置任意张手牌？（♥回复体力，♣摸牌，♠弃置伤害来源一张牌，♦获得伤害来源一张牌）")
+            .set("ai", card => {
+                const me = get.player();
+                const suit = get.suit(card, me);
+                // 按花色收益权衡：残血红桃最优，梅花次之，来源有牌时黑/方片有价值
+                let benefit = 0;
+                if (suit == "heart") benefit = 2.5;
+                else if (suit == "club") benefit = 1.5;
+                else if (suit == "spade" || suit == "diamond") {
+                    const source = event.getTrigger()?.source;
+                    if (source && source.isIn() && source.countCards("he") > 0) benefit = 1.5;
+                }
+                const w = benefit - get.value(card, me) / 3;
+                return w > 0 ? w : -1;
             })
-            .set("filterOk", () => {
-                const cards = ui.selected.cards;
-                return cards.length == 2 && get.suit(cards[0]) != get.suit(cards[1]);
-            })
-            .set("complexCard", true)
-            .set("ai", card => 20 - get.value(card))
             .forResult();
-        event.result = { bool: result?.bool };
     },
     async content(event, trigger, player) {
-        await player.recover(1);
+        const suits = new Set(event.cards.map(card => get.suit(card, player)));
+        const source = trigger.source;
+        if (suits.has("heart")) {
+            await player.recover(1);
+        }
+        if (suits.has("club")) {
+            await player.draw(1);
+        }
+        if (suits.has("spade") && source && source.isIn() && source.countCards("he") > 0) {
+            await player.discardPlayerCard(source, true, "he", "绝境：弃置伤害来源的一张牌");
+        }
+        if (suits.has("diamond") && source && source.isIn() && source.countGainableCards(player, "he") > 0) {
+            await player.gainPlayerCard(source, true, "he", "绝境：获得伤害来源的一张牌");
+        }
     },
     skill_id: "hfhy_juejing",
     _priority: 0,
@@ -6203,11 +6228,389 @@ groupSkill: "qun",
     skill_id: "hfhy_tianxiang",
     _priority: 0,
 },
+"hfhy_lianyin": {
+    audio: ["sbjieyin1.mp3", "sbjieyin2.mp3", "sbjieyin3.mp3"],
+    dutySkill: true,
+    unique: true,
+    initGroup: "wu",
+    forced: true,
+    mark: true,
+    marktext: "姻",
+    intro: {
+        content(storage, player) {
+            const target = guquLianyinTarget(player);
+            const rec = player.getStorage("hfhy_lianyin_recover", 0);
+            return (target ? "联姻对象：" + get.translation(target) : "未选择联姻对象") + "<br>联姻累计回复：" + rec + "/4";
+        },
+    },
+    derivation: ["hfhy_xiaoji_gai", "hfhy_jiejiang"],
+    forced: true,
+    trigger: { global: "gameStart" },
+    filter(event, player) {
+        return !player.storage.hfhy_lianyin_target;
+    },
+    async content(event, trigger, player) {
+        // forced 自动触发，由玩家主动选择联姻对象
+        const result = await player.chooseTarget("联姻：选择一名其他男性角色", true)
+            .set("filterTarget", (card, player2, target) => target != player2 && target.sex == "male")
+            .set("ai", target => {
+                const att = get.attitude(get.player(), target);
+                return att * 2 + target.hp + 1;
+            })
+            .forResult();
+        if (result.bool && result.targets?.length) {
+            player.storage.hfhy_lianyin_target = result.targets[0].playerid;
+            player.markSkill("hfhy_lianyin");
+            game.log(player, "选择了", result.targets[0], "作为联姻对象");
+        }
+    },
+    group: ["hfhy_lianyin_use", "hfhy_lianyin_achieve", "hfhy_lianyin_fail"],
+    subSkill: {
+        use: {
+            audio: ["sbjieyin1.mp3", "sbjieyin2.mp3", "sbjieyin3.mp3"],
+            trigger: { player: "phaseZhunbeiBegin" },
+            filter(event, player) {
+                const target = guquLianyinTarget(player);
+                if (!target || !target.isIn()) return false;
+                if (!(player.isDamaged() || target.isDamaged())) return false;
+                return player.countCards("h") > 0;
+            },
+            logTarget: () => guquLianyinTarget(get.player()),
+            async cost(event, trigger, player) {
+                const target = guquLianyinTarget(player);
+                event.result = await player.chooseToDiscard("h", 1, "联姻：是否弃置一张手牌，令你与" + get.translation(target) + "各回复1点体力？")
+                    .set("ai", card => 5 - get.value(card, player))
+                    .forResult();
+            },
+            async content(event, trigger, player) {
+                const target = guquLianyinTarget(player);
+                // 先计数再回复：achieve 子技能在 recoverAfter 时机读取最新进度
+                if (player.isDamaged()) {
+                    player.storage.hfhy_lianyin_recover = player.getStorage("hfhy_lianyin_recover", 0) + 1;
+                    await player.recover(1);
+                }
+                if (target && target.isIn() && target.isDamaged()) {
+                    await target.recover(1);
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_lianyin",
+            skill_id: "hfhy_lianyin_use",
+            _priority: 0,
+        },
+        achieve: {
+            audio: ["sbjieyin1.mp3", "sbjieyin2.mp3", "sbjieyin3.mp3"],
+            forced: true,
+            skillAnimation: true,
+            animationColor: "green",
+            trigger: { player: "recoverAfter" },
+            filter(event, player) {
+                // 联姻使用中的自回复使累计回复达到 4 时达成使命
+                return player.hasSkill("hfhy_xiaoji") &&
+                    event.getParent().name == "hfhy_lianyin_use" &&
+                    player.getStorage("hfhy_lianyin_recover", 0) >= 4;
+            },
+            async content(event, trigger, player) {
+                player.awakenSkill("hfhy_lianyin");
+                player.changeSkin({ characterName: "yong_sunshangxiang" }, "shu_yong_sunshangxiang");
+                player.changeGroup("shu");
+                await player.gainMaxHp(1);
+                await player.recover(1);
+                await player.removeSkill("hfhy_xiaoji");
+                await player.addSkills("hfhy_xiaoji_gai");
+                game.log(player, "使命成功：势力变更为蜀，【枭姬】升级为【枭姬·改】");
+            },
+            sub: true,
+            sourceSkill: "hfhy_lianyin",
+            skill_id: "hfhy_lianyin_achieve",
+            _priority: 0,
+        },
+        fail: {
+            audio: ["sbjieyin1.mp3", "sbjieyin2.mp3", "sbjieyin3.mp3"],
+            forced: true,
+            skillAnimation: true,
+            animationColor: "gray",
+            trigger: { global: "dying" },
+            filter(event, player) {
+                const target = guquLianyinTarget(player);
+                return player.hasSkill("hfhy_xiaoji") && (event.player == player || (target && event.player == target));
+            },
+            async content(event, trigger, player) {
+                player.awakenSkill("hfhy_lianyin");
+                const target = guquLianyinTarget(player);
+                player.changeHujia(1);
+                if (target && target.isIn()) {
+                    target.changeHujia(1);
+                }
+                await player.removeSkill("hfhy_xiaoji");
+                await player.addSkills("hfhy_jiejiang");
+                game.log(player, "使命失败：获得护甲，【枭姬】改为【截江】");
+            },
+            sub: true,
+            sourceSkill: "hfhy_lianyin",
+            skill_id: "hfhy_lianyin_fail",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_lianyin",
+    _priority: 0,
+},
+"hfhy_xiaoji": {
+    audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
+    zhuanhuanji: true,
+    mark: true,
+    marktext: "姬",
+    intro: {
+        content(storage, player) {
+            return storage ? "阴：当你失去装备区里的一张牌时，你可以摸两张牌" : "阳：当你于回合内使用一张装备牌后，可以视为使用一张无次数限制的【杀】";
+        },
+    },
+    group: ["hfhy_xiaoji_supply", "hfhy_xiaoji_yang", "hfhy_xiaoji_yin"],
+    subSkill: {
+        supply: {
+            audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
+            forced: true,
+            trigger: { player: "phaseUseBegin" },
+            filter(event, player) {
+                return !player.getEquips(1).some(card => card.name == "hfhy_xueying");
+            },
+            async content(event, trigger, player) {
+                // 友徐庶 friendxiaxing 范式：createCard2 + hasUseTarget/chooseUseTarget 守卫
+                const card = game.createCard2("hfhy_xueying", "club", 2);
+                await player.gain(card, "gain2");
+                if (player.hasUseTarget(card) && player.getCards("h").includes(card) && get.name(card, player) == "hfhy_xueying") {
+                    await player.chooseUseTarget(card, true, false);
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_xiaoji",
+            skill_id: "hfhy_xiaoji_supply",
+            _priority: 0,
+        },
+        yang: {
+            audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
+            trigger: { player: "useCardAfter" },
+            filter(event, player) {
+                if (player.getStorage("hfhy_xiaoji", false)) return false;
+                // 换装时阴已先结算并翻阳：同一张装备牌的使用不再触发阳（只按换装时刻的阴阳状态结算）
+                if (event.hfhy_xiaoji_yin_done) return false;
+                if (_status.currentPhase != player) return false;
+                return event.card && get.type(event.card) == "equip";
+            },
+            async cost(event, trigger, player) {
+                event.result = await player.chooseBool("枭姬：是否视为使用一张无次数限制的【杀】？")
+                    .set("ai", () => {
+                        const me = get.player();
+                        return game.hasPlayer(target => me.canUse({ name: "sha", isCard: true }, target) && get.effect(target, { name: "sha", isCard: true }, me, me) > 0);
+                    })
+                    .forResult();
+            },
+            async content(event, trigger, player) {
+                const sha = get.autoViewAs({ name: "sha", isCard: true });
+                const result = await player.chooseTarget("枭姬：选择【杀】的目标", true, (card, player2, target) => player2.canUse(sha, target))
+                    .set("ai", target => get.effect(target, { name: "sha", isCard: true }, get.player(), get.player()))
+                    .forResult();
+                if (result.bool && result.targets?.length) {
+                    await player.useCard(get.autoViewAs({ name: "sha" }), result.targets, false);
+                }
+                player.changeZhuanhuanji("hfhy_xiaoji");
+            },
+            sub: true,
+            sourceSkill: "hfhy_xiaoji",
+            skill_id: "hfhy_xiaoji_yang",
+            _priority: 0,
+        },
+        yin: {
+            audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
+            // 官方 xiaoji 范式：仅靠 player loseAfter 抓不全（换装备、异步失去、装备被他人获得）
+            trigger: {
+                player: "loseAfter",
+                global: ["equipAfter", "addJudgeAfter", "gainAfter", "loseAsyncAfter", "addToExpansionAfter"],
+            },
+            frequent: true,
+            filter(event, player) {
+                return player.getStorage("hfhy_xiaoji", false) == true;
+            },
+            getIndex(event, player) {
+                const evt = event.getl(player);
+                if (evt?.player === player && evt.es) {
+                    return evt.es.length;
+                }
+                return false;
+            },
+            async content(event, trigger, player) {
+                // 本次失去若源自你使用装备牌（换装顶掉旧装备），标记该 useCard，令阳对本张装备牌不再生效
+                const useCardEvt = event.getParent("useCard");
+                if (useCardEvt && useCardEvt.player == player && useCardEvt.card && get.type(useCardEvt.card) == "equip") {
+                    useCardEvt.set("hfhy_xiaoji_yin_done", true);
+                }
+                await player.draw(2);
+                player.changeZhuanhuanji("hfhy_xiaoji");
+            },
+            ai: {
+                noe: true,
+                reverseEquip: true,
+                effect: {
+                    target(card, player, target, current) {
+                        if (get.type(card) == "equip" && !get.cardtag(card, "gifts")) {
+                            return [1, 3];
+                        }
+                    },
+                },
+            },
+            sub: true,
+            sourceSkill: "hfhy_xiaoji",
+            skill_id: "hfhy_xiaoji_yin",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_xiaoji",
+    _priority: 0,
+},
+"hfhy_xiaoji_gai": {
+    audio: ["dcshuren1.mp3", "dcshuren2.mp3"],
+    group: ["hfhy_xiaoji_gai_supply", "hfhy_xiaoji_gai_lose"],
+    subSkill: {
+        supply: {
+            audio: ["dcshuren1.mp3", "dcshuren2.mp3"],
+            forced: true,
+            trigger: { player: "phaseUseBegin" },
+            filter(event, player) {
+                return !player.getEquips(1).some(card => card.name == "hfhy_xueying");
+            },
+            async content(event, trigger, player) {
+                // 友徐庶 friendxiaxing 范式：createCard2 + hasUseTarget/chooseUseTarget 守卫
+                const card = game.createCard2("hfhy_xueying", "club", 2);
+                await player.gain(card, "gain2");
+                if (player.hasUseTarget(card) && player.getCards("h").includes(card) && get.name(card, player) == "hfhy_xueying") {
+                    await player.chooseUseTarget(card, true, false);
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_xiaoji_gai",
+            skill_id: "hfhy_xiaoji_gai_supply",
+            _priority: 0,
+        },
+        lose: {
+            audio: ["dcshuren1.mp3", "dcshuren2.mp3"],
+            trigger: {
+                player: "loseAfter",
+                global: ["equipAfter", "addJudgeAfter", "gainAfter", "loseAsyncAfter", "addToExpansionAfter"],
+            },
+            frequent: true,
+            filter(event, player) {
+                const evt = event.getl(player);
+                return evt?.player === player && evt.es?.length > 0;
+            },
+            getIndex(event, player) {
+                const evt = event.getl(player);
+                if (evt?.player === player && evt.es) {
+                    return evt.es.length;
+                }
+                return false;
+            },
+            async cost(event, trigger, player) {
+                const { control } = await player.chooseControl(["选项一", "选项二", "cancel2"])
+                    .set("choiceList", ["回复1点体力", "令一名角色摸两张牌"])
+                    .set("prompt", "枭姬·改：请选择一项")
+                    .set("ai", () => {
+                        const me = get.player();
+                        return me.isDamaged() ? "选项一" : "选项二";
+                    })
+                    .forResult();
+                event.result = { bool: control != "cancel2", cost_data: control };
+            },
+            async content(event, trigger, player) {
+                if (event.cost_data == "选项一") {
+                    await player.recover(1);
+                    return;
+                }
+                const result = await player.chooseTarget("枭姬·改：令一名角色摸两张牌", true)
+                    .set("ai", target => {
+                        const me = get.player();
+                        return get.attitude(me, target) > 0 ? 1 : -1;
+                    })
+                    .forResult();
+                if (result.bool && result.targets?.length) {
+                    await result.targets[0].draw(2);
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_xiaoji_gai",
+            skill_id: "hfhy_xiaoji_gai_lose",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_xiaoji_gai",
+    _priority: 0,
+},
+"hfhy_jiejiang": {
+    audio: ["xiaoji1.mp3", "xiaoji2.mp3"],
+    groupSkill: "wu",
+    trigger: { player: "useCardToPlayered" },
+    filter(event, player) {
+        return event.card && event.card.name == "sha" && event.target.countCards("e") > 0;
+    },
+    logTarget: "target",
+    async cost(event, trigger, player) {
+        event.result = await player.discardPlayerCard(trigger.target, "e", get.prompt("hfhy_jiejiang", trigger.target)).forResult();
+    },
+    async content(event, trigger, player) {
+        const card = event.cards && event.cards[0];
+        if (!card) return;
+        const subtype = get.subtype(card);
+        if (subtype == "equip1") {
+            // 武器牌：摸两张牌
+            await player.draw(2);
+        } else if (subtype == "equip2") {
+            // 防具牌：此伤害+1
+            const useCardEvent = trigger.getParent("useCard");
+            if (useCardEvent) {
+                const targets = (useCardEvent.hfhy_jiejiang_damage_targets || []).slice();
+                if (!targets.includes(trigger.target.playerid)) {
+                    targets.push(trigger.target.playerid);
+                }
+                useCardEvent.set("hfhy_jiejiang_damage_targets", targets);
+            }
+        } else {
+            // 坐骑牌：不可响应此【杀】
+            trigger.getParent().directHit.push(trigger.target);
+        }
+    },
+    group: ["hfhy_jiejiang_damage"],
+    subSkill: {
+        damage: {
+            forced: true,
+            popup: false,
+            charlotte: true,
+            trigger: { source: "damageBegin1" },
+            filter(event, player) {
+                if (!event.card || event.card.name != "sha") return false;
+                const useCardEvent = event.getParent("useCard");
+                return useCardEvent?.hfhy_jiejiang_damage_targets?.includes(event.player.playerid) == true;
+            },
+            async content(event, trigger, player) {
+                trigger.num++;
+            },
+            sub: true,
+            sourceSkill: "hfhy_jiejiang",
+            skill_id: "hfhy_jiejiang_damage",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_jiejiang",
+    _priority: 0,
+},
+// hfhy_xueying_skill 及其结束阶段弃置效果已随「血影挽歌」卡牌迁入 card.js（官方装备卡技能随卡注册范式）
 };
 const GUQU_SUITS = ["spade", "heart", "club", "diamond"];
 const GUQU_SYMBOL = { spade: "♠", heart: "♥", club: "♣", diamond: "♦" };
 function guquRandomTyped(player, type) {
     const pool = Array.from(ui.cardPile.childNodes).sort(() => Math.random() - 0.5);
     return pool.find(card => get.type(card) === type) || null;
+}
+function guquLianyinTarget(player) {
+    const pid = player.storage.hfhy_lianyin_target;
+    return pid ? game.findPlayer(p => p.playerid === pid) : null;
 }
 export { skills };

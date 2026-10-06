@@ -65,5 +65,71 @@ const cards = {
             },
         },
     },
+    // 「血影挽歌」武器：攻击范围5；不在牌堆，仅由【枭姬】获得并使用。
+    // 官方金禾(jinhe)范式：主动技与结束阶段弃置各自独立成技能、全部列入 skills，
+    // 装备时 addEquipTrigger 逐一注册触发器（挂 group 子技能的 id 易错配，弃用）
+    "hfhy_xueying": {
+        fullskin: true,
+        image: "ext:呼风唤雨/image/hfhy_xueying.png",
+        type: "equip",
+        subtype: "equip1",
+        distance: { attackFrom: -4 },
+        skills: ["hfhy_xueying_skill", "hfhy_xueying_discard"],
+        ai: {
+            basic: {
+                equipValue: 5,
+            },
+            tag: {
+                weapon: 1,
+            },
+        },
+    },
 };
-export { cards };
+
+// 随卡牌注册的装备技能（官方 card pack 的 skill 段，如 zhulu.js）
+const cardSkills = {
+    "hfhy_xueying_skill": {
+        audio: ["sbxiaoji1.mp3", "sbxiaoji2.mp3"],
+        equipSkill: true,
+        enable: "phaseUse",
+        usable: 1,
+        filter(event, player) {
+            return player.hp > 0;
+        },
+        filterTarget: true,
+        async content(event, trigger, player) {
+            await player.loseHp(1);
+            await event.target.changeHujia(1);
+        },
+        ai: {
+            order: 2,
+            result: {
+                player(player) {
+                    return player.hp > 1 ? 1 : 0;
+                },
+                target(player, target) {
+                    if (target.hujia >= 5) return 0;
+                    if (target === player) {
+                        return player.hp > 1 ? 1 : 0;
+                    }
+                    return get.attitude(player, target) > 0 ? 1 : -1;
+                },
+            },
+        },
+    },
+    "hfhy_xueying_discard": {
+        // 回合结束时弃置装备区内的血影挽歌；独立技能+equipSkill，官方 jinhe_lose 范式
+        equipSkill: true,
+        forced: true,
+        popup: false,
+        trigger: { player: "phaseEnd" },
+        filter(event, player) {
+            return player.getEquips(1).some(card => card.name == "hfhy_xueying");
+        },
+        async content(event, trigger, player) {
+            const card = player.getEquips(1).find(card => card.name == "hfhy_xueying");
+            if (card) await player.discard(card);
+        },
+    },
+};
+export { cards, cardSkills };

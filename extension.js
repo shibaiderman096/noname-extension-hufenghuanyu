@@ -1,6 +1,6 @@
 import { lib, game, ui, get, ai, _status } from "noname";
 import { skills } from "./skill.js";
-import { cards } from "./card.js";
+import { cards, cardSkills } from "./card.js";
 import { changelog, changelogLatest } from "./changelog.js";
 import dynamicTranslates from "./dynamicTranslates.js"
 
@@ -63,23 +63,26 @@ export default function(){
 
 	},precontent:function(config){
         lib.characterSubstitute["kuang_zhonghui"] = [
-        ["qun_kuang_zhonghui", ["ext:/呼风唤雨/image/群_狂钟会.jpg", ""]]
+        ["qun_kuang_zhonghui", ["ext:/呼风唤雨/image/kuang_zhonghui1.jpg", ""]]
     ];
         lib.characterSubstitute["shang_zhangfei"] = [
-        ["shu_shang_zhangfei", ["ext:/呼风唤雨/image/shu_shang_zhangfei.jpg", ""]]
+        ["shu_shang_zhangfei", ["ext:/呼风唤雨/image/shang_zhangfei1.jpg", ""]]
     ];
         lib.characterSubstitute["ming_zhugeliang"] = [
-        ["1_ming_zhugeliang", ["ext:/呼风唤雨/image/1_命诸葛亮.png", ""]],
-        ["2_ming_zhugeliang", ["ext:/呼风唤雨/image/2_命诸葛亮.png", ""]],
+        ["1_ming_zhugeliang", ["ext:/呼风唤雨/image/ming_zhugeliang1.png", ""]],
+        ["2_ming_zhugeliang", ["ext:/呼风唤雨/image/ming_zhugeliang2.png", ""]],
     ];
         lib.characterSubstitute["kuang_guanyu"] = [
-        ["1_kuang_guanyu", ["ext:/呼风唤雨/image/1_狂关羽.png", ""]],
+        ["1_kuang_guanyu", ["ext:/呼风唤雨/image/kuang_guanyu1.png", ""]],
     ];
         lib.characterSubstitute["ming_zhangjiao"] = [
-        ["1_ming_zhangjiao", ["ext:/呼风唤雨/image/1_ming_zhangjiao.png", ""]],
+        ["1_ming_zhangjiao", ["ext:/呼风唤雨/image/ming_zhangjiao1.png", ""]],
     ];
         lib.characterSubstitute["ming_jiangwei"] = [
-        ["1_ming_jiangwei", ["ext:/呼风唤雨/image/1_ming_jiangwei.png", ""]],
+        ["1_ming_jiangwei", ["ext:/呼风唤雨/image/ming_jiangwei1.png", ""]],
+    ];
+        lib.characterSubstitute["yong_sunshangxiang"] = [
+        ["shu_yong_sunshangxiang", ["ext:/呼风唤雨/image/yong_sunshangxiang1.png", ""]]
     ];
 	},help:{},config:{
     "版本号": {
@@ -206,7 +209,7 @@ export default function(){
                 maxHp: 4,
                 hujia: 1,
                 skills: ["hfhy_kuangzhan","hfhy_tuxi","hfhy_poji"],
-                img: "extension/呼风唤雨/image/狂董卓.jpg",
+                img: "extension/呼风唤雨/image/kuang_dongzhuo.jpg",
                 dieAudios: ["new_yj_dongzhuo.mp3"],
             },
             "shang_mizhu": {
@@ -216,7 +219,7 @@ export default function(){
                 maxHp: 4,
                 hujia: 0,
                 skills: ["hfhy_shanglue","hfhy_liancai","hfhy_quedi"],
-                img: "extension/呼风唤雨/image/商麋竺.jpg",
+                img: "extension/呼风唤雨/image/shang_mizhu.jpg",
                 dieAudios: ["mizhu.mp3"],
             },
             "kuang_zhonghui": {
@@ -226,7 +229,7 @@ export default function(){
                 maxHp: 3,
                 hujia: 1,
                 skills: ["hfhy_xiaoju","hfhy_choufa"],
-                img: "extension/呼风唤雨/image/狂钟会.jpg",
+                img: "extension/呼风唤雨/image/kuang_zhonghui.jpg",
                 doubleGroup: ["wei","qun"],
                 dieAudios: ["re_zhonghui.mp3"],
             },
@@ -236,7 +239,7 @@ export default function(){
                 hp:3,
                 maxHp:3,
                 skills:["hfhy_jizi","hfhy_jiace","hfhy_guihan","hfhy_wandi"],
-                img:"extension/呼风唤雨/image/qun_shang_zhangfei.jpg",
+                img:"extension/呼风唤雨/image/shang_zhangfei.jpg",
                 doubleGroup:["qun","shu"],
                 dieAudios: ["sb_zhangfei.mp3"],
             },
@@ -246,7 +249,7 @@ export default function(){
                 hp:3,
                 maxHp:5,
                 skills:["hfhy_sangu","hfhy_zhongwang","hfhy_mzgl_bagua"],
-                img:"extension/呼风唤雨/image/命诸葛亮.png",
+                img:"extension/呼风唤雨/image/ming_zhugeliang.png",
                 doubleGroup:["qun","shu"],
                 names: "诸葛|亮",
                 dieAudios: ["friend_zhugeliang.mp3"],
@@ -258,7 +261,7 @@ export default function(){
                 maxHp:4,
                 skills:["hfhy_danqi","hfhy_zhanjiang","hfhy_wusheng"],
                 doubleGroup:["wei","shu"],
-                img:"extension/呼风唤雨/image/狂关羽.png",
+                img:"extension/呼风唤雨/image/kuang_guanyu.png",
                 dieAudios: ["ext:呼风唤雨/audio/po_guanyu.mp3"],
             },
             "po_dengai":{
@@ -276,7 +279,7 @@ export default function(){
                 hp:4,
                 maxHp:5,
                 skills:["hfhy_wushuang","hfhy_chengxiong","hfhy_shiyong"],
-                img:"extension/呼风唤雨/image/狂吕布.png",                
+                img:"extension/呼风唤雨/image/kuang_lvbu.png",                
                 dieAudios: ["sb_lvbu.mp3"],
             },
             "ming_zhangjiao": {
@@ -354,6 +357,16 @@ export default function(){
                 img: "extension/呼风唤雨/image/yong_xiaoqiao.png",
                 dieAudios: ["sb_xiaoqiao.mp3"],
             },
+            "yong_sunshangxiang": {
+                sex: "female",
+                group: "wu",
+                hp: 3,
+                maxHp: 3,
+                skills: ["hfhy_lianyin","hfhy_xiaoji"],
+                doubleGroup: ["wu","shu"],
+                img: "extension/呼风唤雨/image/yong_sunshangxiang.png",
+                dieAudios: ["sb_sunshangxiang.mp3"],
+            },
             "po_huanggai": {
                 sex: "male",
                 group: "wu",
@@ -401,6 +414,7 @@ export default function(){
 			"shang_caohong": "商曹洪",
 			"yong_huangyueying": "勇黄月英",
 			"yong_xiaoqiao": "勇小乔",
+			"yong_sunshangxiang": "勇孙尚香",
 			"po_huanggai": "魄黄盖",
 			"po_zhaoyun": "魄赵云",
 			"ming_guojia": "命郭嘉",
@@ -408,9 +422,16 @@ export default function(){
     },
     card: {
         card: { ...cards },
+        // 装备技能随卡注册（官方 card pack 的 skill 段，loadCard 会注入 lib.skill）
+        skill: { ...cardSkills },
         translate: {
             "hfhy_pofuchenzhou": "破釜沉舟",
             "hfhy_pofuchenzhou_info": `出牌阶段，对所有与你距离为1的其他角色使用。若其打出${get.poptip("sha")}，其弃置一张牌；若其打出${get.poptip("shan")}，其受到1点伤害；若其未打出牌，跳过其下一个摸牌阶段。当你进入濒死状态时，此牌可视为${get.poptip("tao")}使用。`,
+            "hfhy_xueying": "血影挽歌",
+            "hfhy_xueying_info": "装备牌·武器，攻击范围5。出牌阶段限一次，你可以失去一点体力，令一名角色获得一点护甲。回合结束时，你将装备区内的“血影挽歌”置于弃牌堆。",
+            "hfhy_xueying_skill": "血影挽歌",
+            "hfhy_xueying_skill_info": "出牌阶段限一次，你可以失去一点体力，令一名角色获得一点护甲。回合结束时，你将装备区内的“血影挽歌”置于弃牌堆。",
+            "hfhy_xueying_discard": "血影挽歌",
         },
         list: [],
     },
@@ -422,7 +443,7 @@ export default function(){
             "hfhy_tuxi": "突袭",
             "hfhy_tuxi_info": "出牌阶段限一次，你可以弃置X张牌，视为对所有与你距离小于X的角色使用一张不计入次数限制的【杀】。",
             "hfhy_poji": "破极",
-            "hfhy_poji_info": `觉醒技，当你造成伤害时，若你的体力上限大于等于8，你将体力上限调整为4获得一点护甲，获得${get.poptip("hfhy_manzhan")}和${get.poptip("benghuai")}，然后视为使用一张【南蛮入侵】。`,
+            "hfhy_poji_info": `觉醒技，当你造成伤害后，若你的体力上限大于等于8，你将体力上限调整为4并获得一点护甲，获得${get.poptip("hfhy_manzhan")}和${get.poptip("benghuai")}，然后视为使用一张【南蛮入侵】。`,
             "hfhy_manzhan": "蛮战",
             "hfhy_manzhan_info": "当你造成伤害时，若伤害来源的体力上限大于目标角色的体力上限，你可以减1点体力上限，令此伤害+1。",
             "hfhy_liancai": "敛财",
@@ -514,11 +535,19 @@ export default function(){
 			"hfhy_tiangong": "天工",
 			"hfhy_tiangong_info": "出牌阶段开始时，你可以选择一种类型。此阶段你使用与该类型相同的牌时，你摸一张牌；使用类型不同的牌无距离限制。若你此阶段使用过三种类型的牌，结束阶段你可以选择一名角色，将手牌或弃牌堆中的一张装备牌置入其装备区。",
 			"hfhy_guqu": "顾曲",
-			"hfhy_guqu_info": `每轮限一次。首轮开始时或准备阶段，你可以执行${get.poptip("hfhy_xiange")}，此后你每使用或打出一张牌，若该牌的花色与“弦歌合律”相同，你摸一张牌。全部验证完毕后，若本次合律正确的数量多于0，你从牌堆中随机获得一张锦囊牌；多于2，你再从牌堆中随机获得一张装备牌；多于4，你令一名其他角色摸X张牌（X为本次合律成功的数量）且“弦歌合律”的花色数+1。`,
+			"hfhy_guqu_info": `每轮限一次。首轮开始时或准备阶段，你可以执行${get.poptip("hfhy_xiange")}，此后你每使用或打出一张牌，若该牌的花色与“${get.poptip("hfhy_xiange")}”相同，你摸一张牌。全部验证完毕后，若本次合律正确的数量多于0，你从牌堆中随机获得一张锦囊牌；多于2，你再从牌堆中随机获得一张装备牌；多于4，你令一名其他角色摸X张牌（X为本次合律成功的数量）且“${get.poptip("hfhy_xiange")}”的花色数+1。`,
 			"hfhy_xiange": "弦歌合律",
 			"hfhy_xiange_info": "系统随机生成5个花色组成“谱”。此后你每使用或打出一张牌与“谱”中当前比对位相比，无论是否相同，比对位均推进。",
 			"hfhy_tianxiang": "天香",
 			"hfhy_tianxiang_info": "当你使用或打出牌时，你可以改变此牌的花色（每轮每种花色限一次）。",
+			"hfhy_lianyin": "联姻",
+			"hfhy_lianyin_info": `使命技。你的登场势力为吴。游戏开始时，你选择一名其他男性角色。准备阶段，若你或其已受伤，你可以弃置一张手牌令你与其各回复一点体力。成功：你使用“联姻”回复不少于4点体力，将你的势力变更为蜀，增加一点体力上限并回复一点体力，然后修改${get.poptip("hfhy_xiaoji")}。失败：在使命成功前，你或其进入濒死状态，你与其各获得一点护甲，然后你失去${get.poptip("hfhy_xiaoji")}获得${get.poptip("hfhy_jiejiang")}。`,
+			"hfhy_xiaoji": "枭姬",
+			"hfhy_xiaoji_info": `转换技。出牌阶段开始时，若你的装备区没有“${get.poptip("hfhy_xueying")}”你获得并使用之；阳：当你于回合内使用一张装备牌后，可以视为你使用了一张无次数限制的【杀】；阴：当你失去装备区里的一张牌时，你可以摸两张牌。`,
+			"hfhy_xiaoji_gai": "枭姬·改",
+			"hfhy_xiaoji_gai_info": `出牌阶段开始时，若你的装备区没有“${get.poptip("hfhy_xueying")}”你获得并使用之；当你失去装备区里的一张牌时，你可以选择一项：1.回复一点体力 2.令一名角色摸两张牌。`,
+			"hfhy_jiejiang": "截江",
+			"hfhy_jiejiang_info": "吴势力技。当你使用【杀】指定目标时，你可以弃置其装备区的一张牌。若以此法弃置的是：武器牌，你摸两张牌；防具牌，此伤害+1；坐骑牌，其不可响应此【杀】。",
 			"hfhy_gu": "顾",
 			"hfhy_gu_info": "三顾使命中获得的燃料标记。",
 			"hfhy_zhongwang": "众望",
@@ -560,7 +589,7 @@ export default function(){
             "hfhy_longdan_sha": "龙胆",
             "hfhy_longdan_shan": "龙胆",
             "hfhy_juejing": "绝境",
-            "hfhy_juejing_info": "当你进入濒死状态时，你可以弃置花色不同的两张牌，然后回复1点体力。",
+            "hfhy_juejing_info": "当你进入濒死状态时，你可以弃置任意张手牌，若其中包含的花色为：♥，你回复1点体力；♣，你摸一张牌；♠，你弃置伤害来源的一张牌；♦，你获得伤害来源的一张牌。",
             "hfhy_huaiyou": "怀幼",
             "hfhy_huaiyou_info": "你的手牌上限为X；摸牌阶段，你多摸X-2张牌（X为你拥有的“胆”标记数量的一半向下取整）。",
             "hfhy_powei": "破围",
@@ -579,6 +608,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.6",
+    version: "1.7",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };
