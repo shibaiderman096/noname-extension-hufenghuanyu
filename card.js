@@ -32,15 +32,36 @@ const cards = {
                 .set("prompt", "破釜沉舟：请打出【杀】或【闪】")
                 .set("ai", card => {
                     const me = get.player();
-                    // 打出杀只需多弃一张牌，最划算；打出闪要挨1点伤害；什么都不打只跳过摸牌阶段
-                    if (card.name == "sha") return 6 - get.value(card);
-                    if (card.name == "shan") return (me.hp > 2 ? 3 : -1) - get.value(card);
+                    if (!card) return -1;
+                    if (typeof card === "string") {
+                        const order = get.order(card);
+                        if (order > 0) return order;
+                        const viewAs = get.info(card)?.viewAs;
+                        if (viewAs && typeof viewAs == "object") {
+                            if (viewAs.name == "sha") return 1.6;
+                            if (viewAs.name == "shan") return 1.8;
+                        }
+                        return -1;
+                    }
+                    const name = get.name(card, me);
+                    const value = get.value(card, me);
+                    if (name == "sha") {
+                        // 打出【杀】的收益是避免跳过摸牌，成本是本牌与可能追加弃置的一张牌
+                        const extra = me.countDiscardableCards(me, "he", current => current != card) > 0;
+                        const skipValue = Math.max(2.2, Math.min(4.6, 5.2 - me.countCards("h") * 0.35));
+                        return skipValue - value - (extra ? 1.6 : 0);
+                    }
+                    if (name == "shan") {
+                        // 打出【闪】避免1点伤害；低体力时伤害代价更高
+                        const damageValue = me.hp <= 1 ? 6 : me.hp == 2 ? 4.2 : 1.7;
+                        return damageValue - value;
+                    }
                     return -1;
                 })
                 .forResult();
             if (result.bool && result.cards?.length) {
-                if (result.cards[0].name == "sha") {
-                    if (target.countCards("he") > 0) {
+                if (hfhyPofuchenzhouResponseName(result, target) == "sha") {
+                    if (target.countDiscardableCards(target, "he") > 0) {
                         await target.chooseToDiscard("he", true, "破釜沉舟：弃置一张牌")
                             .set("ai", card => 5 - get.value(card))
                             .forResult();
@@ -55,13 +76,38 @@ const cards = {
             }
         },
         ai: {
-            order: 6,
+            order(item, player) {
+                if (_status.event?.type === "dying") return 9;
+                if (!player || !player.isIn?.()) return -1;
+                const targets = game.filterPlayer(target => target != player && target.isIn() && get.distance(player, target) == 1);
+                if (!targets.length) return -1;
+                const score = targets.reduce((sum, target) => {
+                    return sum + hfhyPofuchenzhouTargetValue(player, target) * Math.sign(get.attitude(player, target));
+                }, 0);
+                // 低体力时保留为自救桃，只有净收益明显时才转攻
+                const threshold = player.hp <= 1 ? 3 : 0.5;
+                return score > threshold ? 6 : -1;
+            },
             useful: 4.5,
             value: 6,
+            result: {
+                player(player, target) {
+                    if (_status.event?.type === "dying") return 1;
+                    return 0;
+                },
+                target(player, target) {
+                    return hfhyPofuchenzhouTargetValue(player, target);
+                },
+            },
             tag: {
                 save: 1,
                 damage: 1,
                 discard: 1,
+                respond: 1,
+                respondSha: 1,
+                respondShan: 1,
+                multitarget: 1,
+                multineg: 1,
             },
         },
     },
@@ -132,4 +178,24 @@ const cardSkills = {
         },
     },
 };
+function hfhyPofuchenzhouTargetValue(player, target) {
+    if (!target || target === player || !target.isIn()) return 0;
+    let harm = 1.1;
+    if (target.hp <= 1) harm += 1.6;
+    else if (target.hp == 2) harm += 0.8;
+    const hasSha = target.mayHaveSha(player, "respond");
+    const hasShan = target.mayHaveShan(player, "respond");
+    if (!hasSha && !hasShan) harm += 0.9;
+    else if (hasShan && !hasSha) harm += 0.5;
+    const threat = Math.max(0.6, Math.min(1.8, get.threaten(target) / 1.5));
+    return -harm * threat;
+}
+function hfhyPofuchenzhouResponseName(result, target) {
+    if (result.skill) {
+        const viewAs = get.info(result.skill)?.viewAs;
+        if (viewAs && typeof viewAs == "object" && viewAs.name) return viewAs.name;
+    }
+    const card = result.card || (result.cards && result.cards[0]);
+    return card ? get.name(card, target) : "";
+}
 export { cards, cardSkills };

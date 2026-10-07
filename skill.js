@@ -146,17 +146,20 @@ const skills = {
     },
     "hfhy_liancai": {
         audio:["ziyuan1.mp3","ziyuan2.mp3","jugu1.mp3","jugu2.mp3"],
+        // 官方连营范式：交给他人（give→gain 内部 lose 带 getlx=false，其 getl 返回空结构）等
+        // 路径仅靠 player loseAfter 抓不到，须补 global 时机（gainAfter 等）
         trigger: {
             player: "loseAfter",
+            global: ["equipAfter", "addJudgeAfter", "gainAfter", "loseAsyncAfter", "addToExpansionAfter"],
         },
         filter(event, player) {
             if (player == _status.currentPhase) return false;
             const evt = event.getl(player);
-            if (!evt || !evt.hs || !evt.hs.length) return false;
+            if (!evt || evt.player !== player || !evt.hs || !evt.hs.length) return false;
             return player.countCards("h") >= player.hp;
         },
-        content() {
-            player.draw();
+        async content(event, trigger, player) {
+            await player.draw();
         },
         "skill_id": "hfhy_liancai",
         "_priority": 0,
@@ -220,32 +223,31 @@ const skills = {
                 .set("ai", button => {
                     const player = get.player();
                     const phase = button.link;
-                    // 跳过弃牌阶段：需要弃的牌越多越划算
+                    // 总倾向：屯牌——优先保住手牌（跳过弃牌/出牌），慎选损血的跳过摸牌
+                    // 跳过弃牌阶段：一张都不用弃（代价是本回合不能对其他角色用牌）
                     if (phase === "phaseDiscard") {
                         const num = player.needsToDiscard();
-                        return num > 1 ? Math.min(4, num) : 0;
+                        return num > 0 ? Math.min(5, 2 + num) : 0;
                     }
-                    // 跳过摸牌阶段：摸体力张牌、失去1点体力并获得咆哮
+                    // 跳过出牌阶段：不花手牌、手牌上限+体力，附带一次免费杀，屯牌首选
+                    if (phase === "phaseUse") {
+                        if (player.hp <= 1) return 0;
+                        const hand = player.countCards("h");
+                        const limit = player.getHandcardLimit ? player.getHandcardLimit() : player.hp;
+                        let val = 2.2 + Math.min(3, player.hp * 0.6);
+                        if (hand > limit) val += Math.min(2, hand - limit);
+                        if (game.hasPlayer(cur => player.inRange(cur) && get.attitude(player, cur) < 0)) val += 0.6;
+                        if (hand < 2) val -= 2.5;
+                        return val;
+                    }
+                    // 跳过摸牌阶段：损血且变相降低本回合手牌上限，与屯牌相悖，仅在手牌见底时考虑
                     if (phase === "phaseDraw") {
                         if (player.hp <= 1) return 0;
                         const extra = player.hp - 2;
-                        const hasSha = player.countCards("h", card => get.name(card, player) === "sha") > 0;
-                        if (extra <= 0 && (!hasSha || player.hp <= 2)) return 0;
-                        let val = 2 + extra + (hasSha ? 1 : 0);
-                        if (player.hp <= 2) val -= 3;
-                        return val;
-                    }
-                    // 跳过出牌阶段：手牌上限+体力并获得一次无距离限制的杀
-                    if (phase === "phaseUse") {
-                        if (player.hp <= 1) return 0;
-                        const hasEnemy = game.hasPlayer(cur => player.inRange(cur) && get.attitude(player, cur) < 0);
-                        if (!hasEnemy) return 0;
-                        const hand = player.countCards("h");
-                        const limit = player.getHandcardLimit ? player.getHandcardLimit() : player.hp;
-                        let val = 1.5;
-                        val += Math.min(3, Math.max(0, hand - limit));
-                        // 手牌充足时正常出牌通常更划算
-                        if (hand >= 4) val -= 1;
+                        if (extra <= 0) return 0;
+                        if (player.countCards("h") >= 2) return 0;
+                        let val = 1 + extra;
+                        if (player.hp <= 2) val -= 2;
                         return val;
                     }
                     return 0;
@@ -5830,14 +5832,18 @@ groupSkill: "qun",
     audio: ["shishengshibai.mp3"],
     enable: "phaseUse",
     filter(event, player) {
-        if (!player.countCards("h")) return false;
+        if (!player.countCards("h") || player.hasSkillTag("noCompareSource")) return false;
         return game.hasPlayer(target => {
-            return target != player && target.isIn() && target.countCards("h") > 0 &&
+            return target != player && target.isIn() &&
+                player.canCompare(target) &&
+                hfhy_shishengHasBlockableSkill(target) &&
                 !player.getStorage("hfhy_shisheng_targets", []).includes(target);
         });
     },
     filterTarget(card, player, target) {
-        return target != player && target.isIn() && target.countCards("h") > 0 &&
+        return target != player && target.isIn() &&
+            player.canCompare(target) &&
+            hfhy_shishengHasBlockableSkill(target) &&
             !player.getStorage("hfhy_shisheng_targets", []).includes(target);
     },
     init(player, skill) {
@@ -5852,11 +5858,8 @@ groupSkill: "qun",
         if (result.bool || result.tie) {
             // 拼点不输（赢或平局）：令其失去一个技能直到其下个回合结束时
             const result2 = await player.chooseSkill(target, "十胜：令其失去一个技能直到其下个回合结束时")
-                .set("func", (info, skill) => {
-                    if (!info) return false;
-                    if (info.charlotte || info.locked || info.persevereSkill) return false;
-                    return true;
-                })
+                .set("skillRankPlayer", target)
+                .set("func", hfhy_shishengCanBlockSkill)
                 .forResult();
             const chosen = result2?.skill;
             if (chosen && lib.skill[chosen]) {
@@ -5871,19 +5874,29 @@ groupSkill: "qun",
     },
     group: ["hfhy_shisheng_judge", "hfhy_shisheng_reset"],
     ai: {
-        order: 6.5,
+        order: 8,
         result: {
-            player(player) {
-                // 残血拼不起；手牌里有高点数牌（J以上）时更敢拼
-                if (player.hp <= 1) return 0;
-                const hasHigh = player.getCards("h").some(card => get.number(card) >= 11);
-                return hasHigh ? 1 : 0.6;
+            player(player, target) {
+                // 只把技能价值算在敌方目标上，友方目标始终由 target 结果否决
+                if (target && get.attitude(player, target) >= 0) return 0;
+                if (player.hasSkillTag("noCompareSource") || !player.countCards("h")) return 0;
+                const used = player.getStorage("hfhy_shisheng_targets", []);
+                const enemies = game.filterPlayer(current => {
+                    return current != player && current.isIn() && get.attitude(player, current) < 0 &&
+                        player.canCompare(current) && hfhy_shishengHasBlockableSkill(current) &&
+                        !used.includes(current);
+                });
+                if (!enemies.length) return 0;
+                const best = enemies.reduce((value, current) => Math.max(value, hfhy_shishengSkillValue(current)), 0);
+                const cheapest = player.getCards("h").slice().sort((a, b) => get.value(a, player) - get.value(b, player))[0];
+                const cost = cheapest ? get.value(cheapest, player) : 4;
+                // 十胜的判定让拼点几乎必胜，主要成本只是一张手牌
+                return Math.max(0.8, 3.2 + best * 0.35 - cost * 0.55);
             },
             target(player, target) {
-                // 只拼敌人；敌方残血时收益更低（技能少且输了也无所谓）
-                if (get.attitude(player, target) >= 0) return 0;
-                if (target.hp <= 1) return -2;
-                return -1.5;
+                // 对友方封锁技能同样是负收益；对敌方按可封锁技能的最高价值评估
+                if (get.attitude(player, target) >= 0) return -4;
+                return -(1.4 + hfhy_shishengSkillValue(target) * 0.6);
             },
         },
     },
@@ -5977,10 +5990,26 @@ groupSkill: "qun",
             const result = await player.chooseTarget("遗计：令一名角色获得一张【破釜沉舟】", true)
                 .set("ai", target => {
                     const me = get.player();
-                    // 残血优先自留（濒死当桃保命），其次给队友
-                    if (target == me) return me.hp <= 3 ? 6 : 2;
-                    if (get.attitude(me, target) <= 0) return -1;
-                    return 4 - target.hp * 0.2;
+                    // 残血优先自留（濒死当桃保命），其次给能立即发挥攻击价值或需要保命的队友
+                    if (target == me) {
+                        let value = 4.5;
+                        if (me.hp <= 2) value += 4;
+                        else if (me.hp <= 3) value += 1.5;
+                        if (me.countCards("h") <= 1) value += 1;
+                        return value;
+                    }
+                    const att = get.attitude(me, target);
+                    if (att <= 0) return att * 0.8 - 1;
+                    let value = 2 + att * 2;
+                    if (target.hp <= 2) value += 2.5;
+                    if (game.hasPlayer(current => {
+                        return current != target && current.isIn() &&
+                            get.attitude(target, current) < 0 &&
+                            get.distance(target, current) == 1;
+                    })) {
+                        value += 1.5;
+                    }
+                    return value;
                 })
                 .forResult();
             if (!result.bool || !result.targets?.length) break;
@@ -6017,7 +6046,7 @@ groupSkill: "qun",
                         return [1, num * 1.5];
                     }
                     if (target.hp == 2) {
-                        return [1, num];
+                        return [1, num * 0.5];
                     }
                 }
             },
@@ -6384,7 +6413,7 @@ groupSkill: "qun",
     zhuanhuanji: true,
     forced:true,
     mark: true,
-    marktext: "姬",
+    marktext: "☯",
     intro: {
         content(storage, player) {
             return storage ? "阴：当你失去装备区里的一张牌时，你可以摸两张牌" : "阳：当你于回合内使用一张装备牌后，可以视为使用一张无次数限制的【杀】";
@@ -6621,6 +6650,275 @@ groupSkill: "qun",
     _priority: 0,
 },
 // hfhy_xueying_skill 及其结束阶段弃置效果已随「血影挽歌」卡牌迁入 card.js（官方装备卡技能随卡注册范式）
+"hfhy_shensu": {
+    audio: ["sbshensu1.mp3", "sbshensu2.mp3", "shensu11.mp3", "shensu12.mp3"],
+    // 官方 shensu1 范式：在 phaseXxxBefore 时机 trigger.cancel() 才能取消即将进行的阶段
+    // （phaseXxxBegin 时阶段已开始，player.skip 只对未来的阶段生效）
+    trigger: { player: ["phaseJudgeBefore", "phaseDrawBefore", "phaseUseBefore", "phaseDiscardBefore"] },
+    filter(event, player) {
+        // 跳过判定阶段的代价是弃一张手牌：无手牌不可跳（阶段已在跳过列表中的不再询问）
+        if (event.name == "phaseJudge" && !player.countCards("h")) return false;
+        return !player.skipList.includes(event.name);
+    },
+    async cost(event, trigger, player) {
+        const phase = trigger.name;
+        const phaseName = { phaseJudge: "判定", phaseDraw: "摸牌", phaseUse: "出牌", phaseDiscard: "弃牌" }[phase];
+        event.result = await player.chooseBool(`神速：是否跳过${phaseName}阶段并视为使用一张无次数限制的基本牌？`)
+            .set("ai", () => {
+                const me = get.player();
+                const canSha = game.hasPlayer(cur => get.attitude(me, cur) < 0 && me.canUse({ name: "sha", isCard: true }, cur) && get.effect(cur, { name: "sha", isCard: true }, me, me) > 0);
+                const canTao = me.hp < me.maxHp;
+                const useful = canSha || canTao;
+                switch (phase) {
+                    case "phaseJudge":
+                        // 有延时锦囊必跳；能白嫖一张基本牌也跳
+                        return (me.countCards("j") > 0 || useful) ? 1 : 0;
+                    case "phaseDraw":
+                        return useful ? 1 : 0;
+                    case "phaseUse":
+                        // 跳出牌损失正常出牌机会，仅在手牌匮乏或急需护甲时考虑
+                        return (me.countCards("h") <= 1 || me.hp <= 2) && (useful || me.hujia < 4) ? 1 : 0;
+                    case "phaseDiscard":
+                        // 翻面代价极大，仅当本轮伤害已接近达成复原条件时跳
+                        return (me.storage.hfhy_shensu_damage || 0) >= 3 ? 1 : 0;
+                    default:
+                        return 0;
+                }
+            })
+            .forResult();
+        if (event.result.bool) event.result.cost_data = phase;
+    },
+    async content(event, trigger, player) {
+        const phase = event.cost_data;
+        // 官方 shensu1 范式：取消当前阶段事件即跳过
+        trigger.cancel();
+        if (!Array.isArray(player.storage.hfhy_shensu_skipped)) player.storage.hfhy_shensu_skipped = [];
+        player.storage.hfhy_shensu_skipped.push(phase);
+        // 视为使用一张无次数限制的基本牌（canUse 不传 includecard 即不查次数）
+        const basics = get.inpileVCardList(info => info[0] == "basic" && (info[2] == "sha" || info[2] == "tao"));
+        if (basics.length) {
+            const result = await player.chooseButton(["神速：视为使用一张无次数限制的基本牌", [basics, "vcard"]], true)
+                .set("filterButton", button => {
+                    const me = get.player();
+                    const link = button.link;
+                    if (link[2] == "tao") return me.hp < me.maxHp;
+                    if (link[2] == "sha") return game.hasPlayer(cur => me.canUse({ name: "sha", nature: link[3], isCard: true }, cur));
+                    return false;
+                })
+                .set("ai", button => {
+                    const me = get.player();
+                    const link = button.link;
+                    if (link[2] == "tao") return 2 + (me.maxHp - me.hp) + (me.hp <= 2 ? 2 : 0);
+                    const target = game.findPlayer(cur => me.canUse({ name: "sha", nature: link[3], isCard: true }, cur) && get.effect(cur, { name: "sha", isCard: true }, me, me) > 0);
+                    return target ? get.effect(target, { name: "sha", isCard: true }, me, me) : -1;
+                })
+                .forResult();
+            if (result.bool && result.links?.length) {
+                const link = result.links[0];
+                const card = get.autoViewAs({ name: link[2], nature: link[3], isCard: true });
+                if (link[2] == "sha") {
+                    const targets = await player.chooseTarget(true, "神速：选择【杀】的目标", (card2, player2, target) => player2.canUse({ name: "sha", nature: link[3], isCard: true }, target))
+                        .set("ai", target => get.effect(target, { name: "sha", nature: link[3], isCard: true }, get.player(), get.player()))
+                        .forResult();
+                    if (targets.bool && targets.targets?.length) {
+                        await player.useCard(card, targets.targets, false);
+                    }
+                } else {
+                    await player.useCard(card, player);
+                }
+            }
+        }
+        // 跳过对应阶段的附加效果
+        switch (phase) {
+            case "phaseJudge": {
+                if (player.countCards("h")) {
+                    await player.chooseToDiscard("h", true, "神速：弃置一张手牌")
+                        .set("ai", card => 5 - get.value(card))
+                        .forResult();
+                }
+                break;
+            }
+            case "phaseDraw": {
+                const pileBasics = Array.from(ui.discardPile.childNodes).filter(card => get.type(card) == "basic");
+                if (pileBasics.length) {
+                    const card = pileBasics.randomGet();
+                    await player.gain(card, "gain2");
+                    game.log(player, "从弃牌堆中获得了", card);
+                }
+                break;
+            }
+            case "phaseUse": {
+                await player.changeHujia(1);
+                break;
+            }
+            case "phaseDiscard": {
+                await player.turnOver();
+                game.log(player, "翻面");
+                break;
+            }
+        }
+    },
+    group: ["hfhy_shensu_damage", "hfhy_shensu_restore", "hfhy_shensu_reset"],
+    subSkill: {
+        damage: {
+            // 本轮造成伤害计数（damageSource 在伤害结算末尾触发，num 已定值）
+            forced: true,
+            popup: false,
+            trigger: { source: "damageSource" },
+            filter(event, player) {
+                return event.num > 0;
+            },
+            async content(event, trigger, player) {
+                player.storage.hfhy_shensu_damage = (player.storage.hfhy_shensu_damage || 0) + trigger.num;
+            },
+            sub: true,
+            sourceSkill: "hfhy_shensu",
+            skill_id: "hfhy_shensu_damage",
+            _priority: 0,
+        },
+        restore: {
+            // 回合结束时：播报本轮跳过/伤害统计；本轮伤害 ≥ 本轮跳过阶段数 → 复原武将牌
+            // 官方 xinshensu 调用的即 shensu1 组语音（shensu11/12）
+            audio: ["shensu11.mp3", "shensu12.mp3"],
+            forced: true,
+            popup: false,
+            trigger: { player: "phaseEnd" },
+            filter(event, player) {
+                const skipped = player.storage.hfhy_shensu_skipped;
+                return Array.isArray(skipped) && skipped.length > 0;
+            },
+            async content(event, trigger, player) {
+                const skipped = player.storage.hfhy_shensu_skipped;
+                const damage = player.storage.hfhy_shensu_damage || 0;
+                game.log(player, `本轮跳过了${skipped.length}个阶段，造成了${damage}点伤害`);
+                if (damage >= skipped.length) {
+                    if (player.isTurnedOver()) {
+                        await player.turnOver();
+                        game.log(player, "复原了武将牌");
+                    }
+                } else {
+                    game.log(player, "未达到复原条件");
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_shensu",
+            skill_id: "hfhy_shensu_restore",
+            _priority: 0,
+        },
+        reset: {
+            // 每轮开始清空本轮跳过阶段与伤害计数
+            forced: true,
+            popup: false,
+            silent: true,
+            trigger: { global: "roundStart" },
+            async content(event, trigger, player) {
+                player.storage.hfhy_shensu_skipped = [];
+                player.storage.hfhy_shensu_damage = 0;
+            },
+            sub: true,
+            sourceSkill: "hfhy_shensu",
+            skill_id: "hfhy_shensu_reset",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_shensu",
+    _priority: 0,
+},
+"hfhy_fengxi": {
+    locked: true,
+    audio: ["shensu11.mp3", "shensu12.mp3"],
+    group: ["hfhy_fengxi_mark", "hfhy_fengxi_damage", "hfhy_fengxi_clear"],
+    subSkill: {
+        mark: {
+            // 【杀】结算完毕未对目标造成伤害 → 目标获得“袭”
+            forced: true,
+            popup: false,
+            trigger: { player: "shaAfter" },
+            filter(event, player) {
+                if (!event.targets || !event.targets.length) return false;
+                return event.targets.some(target => target != player && target.isIn());
+            },
+            async content(event, trigger, player) {
+                const marked = [];
+                for (const target of trigger.targets) {
+                    if (target == player || !target.isIn()) continue;
+                    // trigger 是名为"sha"的卡牌结算事件，伤害是其直接子事件（官方 sb.js 双重校验范式）
+                    const damaged = target.getHistory("damage", evt => evt.getParent() == trigger && evt.source == player).length > 0;
+                    if (!damaged) {
+                        target.addSkill("hfhy_xi");
+                        target.addMark("hfhy_xi", 1, false);
+                        target.markSkill("hfhy_xi");
+                        marked.push(target);
+                        game.log(target, "获得了1枚“袭”标记");
+                    }
+                }
+                // popup:false 抑制了自动 logSkill，实际施加标记后手动触发（播风袭语音）
+                if (marked.length) {
+                    player.logSkill("hfhy_fengxi", marked);
+                }
+            },
+            sub: true,
+            sourceSkill: "hfhy_fengxi",
+            skill_id: "hfhy_fengxi_mark",
+            _priority: 0,
+        },
+        damage: {
+            // 对拥有“袭”的目标造成【杀】伤害时：伤害+X 并移除其所有“袭”
+            forced: true,
+            popup: false,
+            trigger: { source: "damageBegin1" },
+            filter(event, player) {
+                return event.card && event.card.name == "sha" && event.player != player && event.player.countMark("hfhy_xi") > 0;
+            },
+            async content(event, trigger, player) {
+                const num = trigger.player.countMark("hfhy_xi");
+                trigger.num += num;
+                game.log(player, "对", trigger.player, "造成的伤害+" + num);
+                trigger.player.removeMark("hfhy_xi", num);
+                trigger.player.unmarkSkill("hfhy_xi");
+                trigger.player.removeSkill("hfhy_xi");
+            },
+            sub: true,
+            sourceSkill: "hfhy_fengxi",
+            skill_id: "hfhy_fengxi_damage",
+            _priority: 0,
+        },
+        clear: {
+            // 准备阶段或死亡时移除场上所有“袭”
+            forced: true,
+            popup: false,
+            forceDie: true,
+            trigger: { player: ["phaseZhunbeiBegin", "dieAfter"] },
+            async content(event, trigger, player) {
+                for (const current of game.players.concat(game.dead || [])) {
+                    const num = current.countMark("hfhy_xi");
+                    if (num > 0) {
+                        current.removeMark("hfhy_xi", num);
+                        current.unmarkSkill("hfhy_xi");
+                        current.removeSkill("hfhy_xi");
+                    }
+                }
+                game.log(player, "移除了场上所有的“袭”标记");
+            },
+            sub: true,
+            sourceSkill: "hfhy_fengxi",
+            skill_id: "hfhy_fengxi_clear",
+            _priority: 0,
+        },
+    },
+    skill_id: "hfhy_fengxi",
+    _priority: 0,
+},
+"hfhy_xi": {
+    // 「袭」标记载体：风袭施加给目标角色的标记
+    mark: true,
+    marktext: "袭",
+    intro: {
+        content(storage, player) {
+            return `拥有${player.countMark("hfhy_xi") || 0}枚“袭”标记`;
+        },
+    },
+},
 };
 const GUQU_SUITS = ["spade", "heart", "club", "diamond"];
 const GUQU_SYMBOL = { spade: "♠", heart: "♥", club: "♣", diamond: "♦" };
@@ -6631,5 +6929,31 @@ function guquRandomTyped(player, type) {
 function guquLianyinTarget(player) {
     const pid = player.storage.hfhy_lianyin_target;
     return pid ? game.findPlayer(p => p.playerid === pid) : null;
+}
+function hfhy_shishengCanBlockSkill(info, skill) {
+    return !!info && !info.charlotte && !info.locked && !info.persevereSkill;
+}
+function hfhy_shishengHasBlockableSkill(target) {
+    return target.getGainableSkills(hfhy_shishengCanBlockSkill).length > 0;
+}
+function hfhy_shishengSkillValue(target) {
+    let value = 1;
+    const event = _status.event;
+    const backup = event?.skillRankPlayer;
+    if (event) event.skillRankPlayer = target;
+    try {
+        for (const skill of target.getGainableSkills(hfhy_shishengCanBlockSkill)) {
+            const rank = get.skillRank(skill);
+            if (rank > value) value = rank;
+        }
+    } catch (e) {
+        // 个别技能缺少配置时保持保底价值，避免 AI 评估中断
+    } finally {
+        if (event) {
+            if (backup === undefined) delete event.skillRankPlayer;
+            else event.skillRankPlayer = backup;
+        }
+    }
+    return value;
 }
 export { skills };

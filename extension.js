@@ -32,6 +32,7 @@ const CHARACTER_NAMES = {
     po_huanggai: "黄盖",
     po_zhaoyun: "赵云",
     ming_guojia: "郭嘉",
+    kuang_xiahouyuan: "夏侯渊",
 };
 // 主名与短前缀分离，运行时拼成“狂董卓”并写入 _prefix 供引擎拆分显示
 const characterTranslates = Object.fromEntries(
@@ -328,8 +329,17 @@ export default function(){
                 hp:4,
                 maxHp:5,
                 skills:["hfhy_wushuang","hfhy_chengxiong","hfhy_shiyong"],
-                img:"extension/呼风唤雨/image/kuang_lvbu.png",                
+                img:"extension/呼风唤雨/image/kuang_lvbu.png",
                 dieAudios: ["sb_lvbu.mp3"],
+            },
+            "kuang_xiahouyuan": {
+                sex: "male",
+                group: "wei",
+                hp: 4,
+                maxHp: 4,
+                skills: ["hfhy_shensu","hfhy_fengxi"],
+                img: "extension/呼风唤雨/image/kuang_xiahouyuan.png",
+                dieAudios: ["re_xiahouyuan.mp3"],
             },
             "ming_zhangjiao": {
                 sex: "male",
@@ -447,7 +457,7 @@ export default function(){
         },
         characterSort: {
             "呼风唤雨": {
-                hfhy_kuang: ["kuang_dongzhuo", "kuang_zhonghui", "kuang_guanyu", "kuang_lvbu", "kuang_huangzhong"],
+                hfhy_kuang: ["kuang_dongzhuo", "kuang_zhonghui", "kuang_guanyu", "kuang_lvbu", "kuang_huangzhong", "kuang_xiahouyuan"],
                 hfhy_shang: ["shang_mizhu", "shang_zhangfei", "shang_caohong"],
                 hfhy_ming: ["ming_zhugeliang", "ming_zhangjiao", "ming_jiangwei", "ming_guojia"],
                 hfhy_po: ["po_dengai", "po_ganning", "po_machao", "po_huanggai", "po_zhaoyun"],
@@ -495,7 +505,7 @@ export default function(){
             "hfhy_quedi": "却敌",
             "hfhy_quedi_info": "当你成为其他角色使用牌的目标时，你可以交给其X张牌，然后取消之。X为你已损失的体力值（且至少为1）",
             "hfhy_shanglue": "商略",
-            "hfhy_shanglue_info": "准备阶段，你可以选择一项：1. 跳过摸牌阶段，然后摸X张牌并失去一点体力；2. 跳过出牌阶段，然后视为你对攻击范围内的一名其他角色使用了一张【杀】，且本回合你的手牌上限+X；3. 跳过弃牌阶段，本回合你不能对其他角色使用牌。",
+            "hfhy_shanglue_info": "准备阶段，你可以选择一项：1. 跳过摸牌阶段，然后摸X张牌并失去一点体力；2. 跳过出牌阶段，然后视为你对攻击范围内的一名其他角色使用了一张【杀】，且本回合你的手牌上限+X；3. 跳过弃牌阶段，本回合你不能对其他角色使用牌（x为你当前的体力值）。",
             "hfhy_xiaoju": "枭据",
 			"hfhy_xiaoju_info": `锁定技，觉醒技。你的登场势力为魏。回合结束时，若你的体力上限不小于5,你将势力改为"群"并获得技能${get.poptip("hfhy_pini")}，然后选择一项1.回复1点体力2.摸两张牌3.获得一个"势"标记。`,
             "hfhy_choufa": "筹伐",
@@ -592,6 +602,12 @@ export default function(){
 			"hfhy_xiaoji_gai_info": `出牌阶段开始时，若你的装备区没有“${get.poptip("hfhy_xueying")}”你获得并使用之；当你失去装备区里的一张牌时，你可以选择一项：1.回复一点体力 2.令一名角色摸两张牌。`,
 			"hfhy_jiejiang": "截江",
 			"hfhy_jiejiang_info": "吴势力技。当你使用【杀】指定目标时，你可以弃置其装备区的一张牌。若以此法弃置的是：武器牌，你摸两张牌；防具牌，此伤害+1；坐骑牌，其不可响应此【杀】。",
+			"hfhy_shensu": "神速",
+			"hfhy_shensu_info": `每当你回合内的判定阶段、摸牌阶段、出牌阶段或弃牌阶段开始时，你可以跳过该阶段，然后视为使用一张无次数限制的基本牌。若你本轮跳过了：判定阶段，你弃置一张手牌；摸牌阶段，你从弃牌堆中获得一张基本牌；出牌阶段，你获得一点护甲；弃牌阶段，你翻面。回合结束时，若你本轮造成的伤害值不小于你本轮跳过的阶段数，你复原你的武将牌。`,
+			"hfhy_fengxi": "风袭",
+			"hfhy_fengxi_info": `锁定技。当你使用【杀】指定目标后，若此【杀】未对其造成伤害，你令其获得1枚“袭”标记。当你使用【杀】对拥有“袭”标记的角色造成伤害时，此伤害+X（X为其“袭”标记的数量），然后移除其所有“袭”标记。你的准备阶段开始时或你死亡时，移除场上所有的“袭”标记。`,
+			"hfhy_xi": "袭",
+			"hfhy_xi_info": `风袭技能的标记。持有者受到狂夏侯渊使用的【杀】造成的伤害时，此伤害+X（X为其“袭”标记的数量），然后移除其所有“袭”标记。`,
 			"hfhy_gu": "顾",
 			"hfhy_gu_info": "三顾使命中获得的燃料标记。",
 			"hfhy_zhongwang": "众望",
@@ -652,6 +668,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.7.1",
+    version: "1.8",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };
