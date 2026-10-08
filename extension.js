@@ -2,7 +2,8 @@ import { lib, game, ui, get, ai, _status } from "noname";
 import { skills } from "./skill.js";
 import { cards, cardSkills } from "./card.js";
 import { changelog, changelogLatest } from "./changelog.js";
-import dynamicTranslates from "./dynamicTranslates.js"
+import dynamicTranslates from "./dynamicTranslates.js";
+import { initGuquUI } from "./guqu_ui.js";
 
 const CHARACTER_PREFIXES = {
     kuang: "狂",
@@ -113,6 +114,7 @@ export default function(){
 	},prepare:function(){
 
 	},precontent:function(config){
+        initGuquUI();
         lib.characterSubstitute["kuang_zhonghui"] = [
         ["qun_kuang_zhonghui", ["ext:/呼风唤雨/image/kuang_zhonghui1.jpg", ""]]
     ];
