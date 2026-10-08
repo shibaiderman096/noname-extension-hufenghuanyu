@@ -18,68 +18,48 @@ const skills = {
         "_priority": 0,
     },
     "hfhy_tuxi": {
-        audio:["baonue21.mp3","baonue22.mp3"],
+        audio: ["baonue21.mp3", "baonue22.mp3"],
         enable: "phaseUse",
         usable: 1,
         filter(event, player) {
-            return player.countCards("h") > 0;
+            return player.countDiscardableCards(player, "h") > 0;
         },
         async content(event, trigger, player) {
-            let result;
-            if (!player.isUnderControl()) {
-                // AI：按局势计算最优弃牌数X（X=1必然无目标落空）——
-                // 逐距离圈累加目标的【杀】收益，减去弃牌价值，取净收益最大的X；无收益时保底弃1
-                const hand = player.getCards("h");
-                const byDist = new Map();
-                for (const current of game.filterPlayer(current => current !== player && current.isIn())) {
-                    const dist = get.distance(player, current);
-                    if (!byDist.has(dist)) byDist.set(dist, []);
-                    byDist.get(dist).push(current);
-                }
-                const values = hand.map(card => get.value(card, player)).sort((a, b) => a - b);
-                let cumulative = 0, bestX = 0, bestNet = 0;
-                for (let X = 1; X <= hand.length; X++) {
-                    for (const current of byDist.get(X - 1) || []) {
-                        cumulative += get.effect(current, { name: "sha", isCard: true }, player, player);
-                    }
-                    const cost = values.slice(0, X).reduce((sum, val) => sum + val, 0);
-                    if (cumulative - cost > bestNet) {
-                        bestNet = cumulative - cost;
-                        bestX = X;
-                    }
-                }
-                const num = bestX >= 2 ? bestX : 1;
-                result = await player.chooseToDiscard(num, "h", true)
-                    .set("ai", card => 5 - get.value(card))
-                    .forResult();
+            const prompt = "突袭：弃置任意X张手牌，视为对所有与你距离小于X的其他角色使用一张【杀】";
+            let next;
+            if (event.isMine() || player.isUnderControl()) {
+                // 玩家自行选择
+                next = player.chooseToDiscard("h", [1, Infinity], true, prompt);
+                next.set("ai", card => 5 - get.value(card));
             } else {
-                result = await player.chooseToDiscard("h", [1, player.countCards("h")], true)
-                    .set("prompt", "突袭：弃置X张手牌，视为对所有与你距离小于X的角色使用一张【杀】")
-                    .set("ai", card => 5 - get.value(card))
-                    .forResult();
+                // AI：按最优方案固定弃牌
+                const best = hfhy_tuxiBest(player);
+                if (best.x < 2 || best.net <= 0) return;
+                next = player.chooseToDiscard("h", [best.x, best.x], true, prompt);
+                next.set("filterCard", card => best.cards.includes(card));
+                next.set("ai", card => (best.cards.includes(card) ? 10 : -10));
             }
-            if (!result.bool || !result.cards?.length) return;
+            const result = await next.forResult();
+            if (!result?.bool || !result.cards?.length) return;
+
             const X = result.cards.length;
-            // get.distance 已自动计入装备与技能的距离修正，无需手动累加
-            const targets = game.filterPlayer(target => {
-                return target !== player && get.distance(player, target) < X;
-            });
-            for (const target of targets) {
-                if (target.isIn()) {
-                    await player.useCard({ name: "sha", isCard: true }, target, false);
-                }
-            }
+            const targets = game.filterPlayer(target =>
+                target !== player && target.isIn() && get.distance(player, target) < X
+            );
+            if (!targets.length) return;
+
+            // 视为使用一张多目标【杀】，不计入出杀次数
+            const card = { name: "sha", isCard: true };
+            const useNext = player.useCard(card, targets, false);
+            useNext.addCount = false;
+            await useNext;
         },
         ai: {
             order: 4,
             result: {
                 player(player) {
-                    // 至少要对距离2以内的敌人有正收益才值得发动（X=1必然落空）
-                    return game.hasPlayer(current => {
-                        return current != player && get.attitude(player, current) < 0 &&
-                            get.distance(player, current) <= 2 &&
-                            get.effect(current, { name: "sha", isCard: true }, player, player) > 0;
-                    }) ? 1 : 0;
+                    const best = hfhy_tuxiBest(player);
+                    return best.x >= 2 && best.net > 0 ? 1 : 0;
                 },
             },
         },
@@ -6919,6 +6899,70 @@ groupSkill: "qun",
         },
     },
 },
+"hfhy_buqu": {
+    audio: ["buqu1.mp3", "buqu2.mp3"],
+    locked: true,
+    // 手牌数上限=已损失体力值：maxHandcard mod 直接返回绝对值（怀幼范式）
+    mod: {
+        maxHandcard(player, num) {
+            return player.getDamagedHp();
+        },
+    },
+    trigger: { player: "dying" },
+    forced: true,
+    async content(event, trigger, player) {
+        await player.loseMaxHp();
+        await player.recover();
+    },
+    skill_id: "hfhy_buqu",
+    _priority: 0,
+},
+"hfhy_xuewei": {
+    audio: ["fenji1.mp3", "fenji2.mp3"],
+    trigger: { global: "useCardToTargeted" },
+    filter(event, player) {
+        if (!event.card || event.card.name != "sha") return false;
+        const target = event.target;
+        if (!target || !target.isIn()) return false;
+        return get.distance(player, target) <= 1;
+    },
+    async cost(event, trigger, player) {
+        const target = trigger.target;
+        const user = trigger.player;
+        event.result = await player.chooseBool(`血卫：是否失去1点体力，令${get.translation(user)}使用的【杀】对${get.translation(target)}无效？`)
+            .set("ai", () => {
+                const me = get.player();
+                const eff = get.effect(target, { name: "sha", isCard: true }, user, me);
+                if (target == me) {
+                    // 自保：体力不足承受伤害时无效化（不屈可兜底回血）
+                    return me.hp <= 1;
+                }
+                if (get.attitude(me, target) <= 0 || eff <= 0) return false;
+                if (me.hp > 2) return true;
+                if (me.hp == 2) return eff >= 4;
+                return eff >= 6;
+            })
+            .forResult();
+    },
+    async content(event, trigger, player) {
+        // 濒死事件上有 filterStop（hp>0 即中止 arrangeTrigger），不屈先回血会导致排在其后的
+        // 濒死时机技能被吞——不能用 dying 触发器补摸，改用引擎在进入濒死时打的 _dyinged 标记
+        const loseEvt = player.loseHp(1);
+        await loseEvt;
+        // 令此【杀】对该目标无效（却敌同款：targets 移除 + excluded）
+        trigger.getParent().excluded.add(trigger.target);
+        trigger.targets.remove(trigger.target);
+        if (loseEvt._dyinged) {
+            await player.draw();
+            game.log(player, "因“血卫”进入濒死状态，摸一张牌");
+        }
+    },
+    ai: {
+        expose: 0.2,
+    },
+    skill_id: "hfhy_xuewei",
+    _priority: 0,
+},
 };
 const GUQU_SUITS = ["spade", "heart", "club", "diamond"];
 const GUQU_SYMBOL = { spade: "♠", heart: "♥", club: "♣", diamond: "♦" };
@@ -6929,6 +6973,37 @@ function guquRandomTyped(player, type) {
 function guquLianyinTarget(player) {
     const pid = player.storage.hfhy_lianyin_target;
     return pid ? game.findPlayer(p => p.playerid === pid) : null;
+}
+function hfhy_tuxiBest(player, cards) {
+    cards ??= player.getCards("h", card => lib.filter.cardDiscardable(card, player));
+    if (cards.length < 2) return { x: 0, net: 0 };
+
+    const sha = { name: "sha", isCard: true };
+    // 每个潜在目标：距离 + 杀的收益（只算一次）
+    const infos = game.filterPlayer(current => current !== player && current.isIn())
+        .map(current => ({
+            dist: get.distance(player, current),
+            eff: get.effect(current, sha, player, player),
+        }));
+
+    const values = cards.map(card => get.value(card, player)).sort((a, b) => a - b);
+    const COST_RATE = 0.3; // 弃牌代价折算系数，按实际手感调整
+
+    let bestX = 0, bestNet = 0, cost = 0;
+    for (let X = 1; X <= cards.length; X++) {
+        cost += values[X - 1];
+        if (X < 2) continue; // X=1 时没有距离小于1的目标
+        let gain = 0;
+        for (const info of infos) {
+            if (info.dist < X) gain += info.eff;
+        }
+        const net = gain - cost * COST_RATE;
+        if (net > bestNet) {
+            bestNet = net;
+            bestX = X;
+        }
+    }
+    return { x: bestX, net: bestNet };
 }
 function hfhy_shishengCanBlockSkill(info, skill) {
     return !!info && !info.charlotte && !info.locked && !info.persevereSkill;

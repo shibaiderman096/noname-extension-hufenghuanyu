@@ -33,6 +33,7 @@ const CHARACTER_NAMES = {
     po_zhaoyun: "赵云",
     ming_guojia: "郭嘉",
     kuang_xiahouyuan: "夏侯渊",
+    kuang_zhoutai: "周泰",
 };
 // 主名与短前缀分离，运行时拼成“狂董卓”并写入 _prefix 供引擎拆分显示
 const characterTranslates = Object.fromEntries(
@@ -341,6 +342,15 @@ export default function(){
                 img: "extension/呼风唤雨/image/kuang_xiahouyuan.png",
                 dieAudios: ["re_xiahouyuan.mp3"],
             },
+            "kuang_zhoutai": {
+                sex: "male",
+                group: "wu",
+                hp: 1,
+                maxHp: 12,
+                skills: ["hfhy_buqu","hfhy_xuewei"],
+                img: "extension/呼风唤雨/image/kuang_zhoutai.png",
+                dieAudios: ["zhoutai.mp3"],
+            },
             "ming_zhangjiao": {
                 sex: "male",
                 group: "qun",
@@ -457,7 +467,7 @@ export default function(){
         },
         characterSort: {
             "呼风唤雨": {
-                hfhy_kuang: ["kuang_dongzhuo", "kuang_zhonghui", "kuang_guanyu", "kuang_lvbu", "kuang_huangzhong", "kuang_xiahouyuan"],
+                hfhy_kuang: ["kuang_dongzhuo", "kuang_zhonghui", "kuang_guanyu", "kuang_lvbu", "kuang_huangzhong", "kuang_xiahouyuan", "kuang_zhoutai"],
                 hfhy_shang: ["shang_mizhu", "shang_zhangfei", "shang_caohong"],
                 hfhy_ming: ["ming_zhugeliang", "ming_zhangjiao", "ming_jiangwei", "ming_guojia"],
                 hfhy_po: ["po_dengai", "po_ganning", "po_machao", "po_huanggai", "po_zhaoyun"],
@@ -495,7 +505,7 @@ export default function(){
             "hfhy_kuangzhan": "狂战",
             "hfhy_kuangzhan_info": "锁定技，当你造成或受到伤害后，若你的体力上限小于8，你增加1点体力上限并摸一张牌。",
             "hfhy_tuxi": "突袭",
-            "hfhy_tuxi_info": "出牌阶段限一次，你可以弃置X张牌，视为对所有与你距离小于X的角色使用一张不计入次数限制的【杀】。",
+            "hfhy_tuxi_info": "出牌阶段限一次，你可以弃置任意X张手牌，视为对所有与你距离小于X的其他角色使用一张不计入次数限制的【杀】。",
             "hfhy_poji": "破极",
             "hfhy_poji_info": `觉醒技，当你造成伤害后，若你的体力上限大于等于8，你将体力上限调整为4并获得一点护甲，获得${get.poptip("hfhy_manzhan")}和${get.poptip("benghuai")}，然后视为使用一张【南蛮入侵】。`,
             "hfhy_manzhan": "蛮战",
@@ -608,6 +618,10 @@ export default function(){
 			"hfhy_fengxi_info": `锁定技。当你使用【杀】指定目标后，若此【杀】未对其造成伤害，你令其获得1枚“袭”标记。当你使用【杀】对拥有“袭”标记的角色造成伤害时，此伤害+X（X为其“袭”标记的数量），然后移除其所有“袭”标记。你的准备阶段开始时或你死亡时，移除场上所有的“袭”标记。`,
 			"hfhy_xi": "袭",
 			"hfhy_xi_info": `风袭技能的标记。持有者受到狂夏侯渊使用的【杀】造成的伤害时，此伤害+X（X为其“袭”标记的数量），然后移除其所有“袭”标记。`,
+			"hfhy_buqu": "不屈",
+			"hfhy_buqu_info": "锁定技。你的手牌数上限等于你已损失的体力值。当你进入濒死状态时，你减少一点体力上限，然后回复一点体力。",
+			"hfhy_xuewei": "血卫",
+			"hfhy_xuewei_info": "当一名角色成为【杀】的目标后，若你与其距离1以内，你可以失去一点体力令此【杀】无效。若你因此进入濒死状态，你摸一张牌。",
 			"hfhy_gu": "顾",
 			"hfhy_gu_info": "三顾使命中获得的燃料标记。",
 			"hfhy_zhongwang": "众望",
@@ -668,6 +682,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.8",
+    version: "1.8.1",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };
