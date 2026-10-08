@@ -6721,6 +6721,8 @@ groupSkill: "qun",
         const phase = event.cost_data;
         // 官方 shensu1 范式：取消当前阶段事件即跳过
         trigger.cancel();
+        const phaseName = { phaseJudge: "判定", phaseDraw: "摸牌", phaseUse: "出牌", phaseDiscard: "弃牌" }[phase];
+        if (phaseName) game.log(player, "跳过了" + phaseName + "阶段");
         if (!Array.isArray(player.storage.hfhy_shensu_skipped)) player.storage.hfhy_shensu_skipped = [];
         player.storage.hfhy_shensu_skipped.push(phase);
         // 视为使用一张无次数限制的基本牌（canUse 不传 includecard 即不查次数）
