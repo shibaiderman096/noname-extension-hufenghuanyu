@@ -4996,9 +4996,23 @@ groupSkill: "qun",
     },
     async cost(event, trigger, player) {
         const type = get.type(trigger.card);
+        // AI：消耗低价值同类型牌换取复用高价值牌，不划算就不发动
+        let goon = true;
+        if (!player.isUnderControl()) {
+            const copy = get.autoViewAs({ name: trigger.card.name, nature: trigger.card.nature, isCard: true, hfhy_qiaosi_copy: true });
+            const copyValue = player.getUseValue(copy) || 0;
+            const candidates = player.getCards("h", card => get.type(card) == type);
+            const cheapest = candidates.slice().sort((a, b) => get.value(a, player) - get.value(b, player))[0];
+            goon = !!cheapest && copyValue > get.value(cheapest, player);
+        }
         const result = await player.chooseToDiscard("h", get.prompt2("hfhy_qiaosi"))
             .set("filterCard", card => get.type(card) == type)
-            .set("ai", card => 5 - get.value(card))
+            .set("goon", goon)
+            .set("ai", card => {
+                if (!get.event().goon) return 0;
+                // 弃最不值钱的同类型牌
+                return 5 - get.value(card);
+            })
             .forResult();
         event.result = { bool: result?.bool };
     },
@@ -5045,9 +5059,30 @@ groupSkill: "qun",
         const result = await player.chooseButton(["天工：选择一种类型", [choices, "textbutton"]])
             .set("ai", button => {
                 const type = button.link;
-                let num = player.countCards("h", card => get.type(card) == type);
-                if (type == "equip") num += 1.5;
-                return num;
+                const me = get.player();
+                // 该类型的预计使用次数：杀需有合法目标、桃需能回血、闪无法主动使用
+                let uses = me.countCards("h", card => {
+                    if (get.type(card) != type) return false;
+                    if (type == "basic") {
+                        const name = get.name(card);
+                        if (name == "sha") return game.hasPlayer(cur => me.canUse({ name: "sha", isCard: true }, cur));
+                        if (name == "tao") return me.hp < me.maxHp;
+                        if (name == "shan") return false;
+                    }
+                    return true;
+                });
+                if (type == "trick") uses += 0.5; // 锦囊整体收益更高
+                // 选非基本类型时【杀】获得无距离限制：手上有杀但当前无射程内目标时加分
+                if (type != "basic") {
+                    const shaBlocked = me.countCards("h", card =>
+                        get.name(card) == "sha" &&
+                        !game.hasPlayer(cur => me.canUse({ name: "sha", isCard: true }, cur))
+                    );
+                    uses += shaBlocked * 0.8;
+                }
+                // 装备牌通常较少，摸牌期望低，降权
+                if (type == "equip") uses *= 0.6;
+                return uses;
             })
             .forResult();
         event.result = { bool: result?.bool, cost_data: result?.links?.[0] };
