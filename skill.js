@@ -151,7 +151,10 @@ const skills = {
         trigger: {
             target: "useCardToTarget",
         },
+        usable: 1,
         filter(event, player) {
+            // “每回合”指其他角色的回合：自己回合内不发动
+            if (_status.currentPhase == player) return false;
             if (event.player == player) return false;
             if (!event.targets.includes(player)) return false;
             const num = Math.max(1, player.getDamagedHp());
@@ -159,13 +162,33 @@ const skills = {
         },
         async cost(event, trigger, player) {
             const num = Math.max(1, player.getDamagedHp());
+            // AI：无害/有利牌不发动；取消收益需覆盖自己的牌损失与资敌增益
+            if (!player.isUnderControl()) {
+                const eff = get.effect(player, trigger.card, trigger.player, player);
+                if (eff >= 0) {
+                    event.result = { bool: false };
+                    return;
+                }
+                const give = player.getCards("he")
+                    .slice()
+                    .sort((a, b) => get.value(a, player) - get.value(b, player))
+                    .slice(0, num);
+                const loss = give.reduce((sum, card) => sum + get.value(card, player), 0);
+                const feed = give.reduce((sum, card) => sum + get.value(card, trigger.player), 0);
+                if (-eff < loss + feed * 0.5) {
+                    event.result = { bool: false };
+                    return;
+                }
+            }
             const result = await player.chooseCard(
                 "he",
                 num,
                 `交给${get.translation(trigger.player)}${num}张牌并取消此目标`
             )
             .set("ai", card => {
-                return 6 - get.value(card);
+                // 给最不值钱的牌；桃/无懈这类救命牌重罚
+                const keep = card.name == "tao" || card.name == "wuxie" ? 4 : 0;
+                return 5 - get.value(card, player) - keep;
             })
             .forResult();
             if (!result.bool) return;
