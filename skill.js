@@ -6708,8 +6708,8 @@ groupSkill: "qun",
                         // 跳出牌损失正常出牌机会，仅在手牌匮乏或急需护甲时考虑
                         return (me.countCards("h") <= 1 || me.hp <= 2) && (useful || me.hujia < 4) ? 1 : 0;
                     case "phaseDiscard":
-                        // 翻面代价极大，仅当本轮伤害已接近达成复原条件时跳
-                        return (me.storage.hfhy_shensu_damage || 0) >= 3 ? 1 : 0;
+                        // 翻面在回合结束真实生效（失去下个回合）：仅当不跳过将弃置较多手牌时才值得
+                        return me.needsToDiscard() >= 2 ? 1 : 0;
                     default:
                         return 0;
                 }
@@ -6782,11 +6782,7 @@ groupSkill: "qun",
                 await player.changeHujia(1);
                 break;
             }
-            case "phaseDiscard": {
-                await player.turnOver();
-                game.log(player, "翻面");
-                break;
-            }
+            // 跳过弃牌阶段的翻面延迟到回合结束（restore）结算，避免被本轮复原直接抵消
         }
     },
     group: ["hfhy_shensu_damage", "hfhy_shensu_restore", "hfhy_shensu_reset"],
@@ -6829,6 +6825,11 @@ groupSkill: "qun",
                     }
                 } else {
                     game.log(player, "未达到复原条件");
+                }
+                // 先结算复原，再应用跳过弃牌阶段的翻面：该翻面是真实代价，不会被本轮复原抵消
+                if (skipped.includes("phaseDiscard") && player.isIn() && !player.isTurnedOver()) {
+                    await player.turnOver();
+                    game.log(player, "翻面");
                 }
             },
             sub: true,
