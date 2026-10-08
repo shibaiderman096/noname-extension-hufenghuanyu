@@ -3,7 +3,7 @@ import { skills } from "./skill.js";
 import { cards, cardSkills } from "./card.js";
 import { changelog, changelogLatest } from "./changelog.js";
 import dynamicTranslates from "./dynamicTranslates.js";
-import { initGuquUI } from "./guqu_ui.js";
+import { initGuquUI } from "./ui/guqu_ui.js";
 
 const CHARACTER_PREFIXES = {
     kuang: "狂",
