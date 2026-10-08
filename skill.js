@@ -7044,7 +7044,9 @@ function guquLianyinTarget(player) {
 }
 function hfhy_tuxiBest(player, cards) {
     cards ??= player.getCards("h", card => lib.filter.cardDiscardable(card, player));
-    if (cards.length < 2) return { x: 0, net: 0 };
+    // 按价值升序排列：弃牌时优先弃最不值钱的
+    const sorted = cards.slice().sort((a, b) => get.value(a, player) - get.value(b, player));
+    if (sorted.length < 2) return { x: 0, net: 0, cards: [] };
 
     const sha = { name: "sha", isCard: true };
     // 每个潜在目标：距离 + 杀的收益（只算一次）
@@ -7054,11 +7056,11 @@ function hfhy_tuxiBest(player, cards) {
             eff: get.effect(current, sha, player, player),
         }));
 
-    const values = cards.map(card => get.value(card, player)).sort((a, b) => a - b);
+    const values = sorted.map(card => get.value(card, player));
     const COST_RATE = 0.3; // 弃牌代价折算系数，按实际手感调整
 
     let bestX = 0, bestNet = 0, cost = 0;
-    for (let X = 1; X <= cards.length; X++) {
+    for (let X = 1; X <= sorted.length; X++) {
         cost += values[X - 1];
         if (X < 2) continue; // X=1 时没有距离小于1的目标
         let gain = 0;
@@ -7071,7 +7073,7 @@ function hfhy_tuxiBest(player, cards) {
             bestX = X;
         }
     }
-    return { x: bestX, net: bestNet };
+    return { x: bestX, net: bestNet, cards: sorted.slice(0, bestX) };
 }
 function hfhy_shishengCanBlockSkill(info, skill) {
     return !!info && !info.charlotte && !info.locked && !info.persevereSkill;
