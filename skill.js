@@ -115,6 +115,8 @@ const skills = {
             return "减1点体力上限，令对" + get.translation(event.player) + "造成的伤害+1";
         },
         check(event, player) {
+            // 只对敌方目标发动，队友/中立不发动
+            if (get.attitude(player, event.player) >= 0) return false;
             return player.maxHp > 5;
         },
         content() {
@@ -3387,10 +3389,15 @@ groupSkill: "qun",
     group: ["hfhy_jizhi_mark", "hfhy_jizhi_achieve", "hfhy_jizhi_fail", "hfhy_jizhi_nolimit"],
     subSkill: {
         mark: {
-            trigger: { player: ["useCard", "respond"] },
+            trigger: { player: ["useCard", "respond"], global: "useCardToTargeted" },
             forced: true,
             filter(event, player) {
-                return event.card.name == "sha" && player.countMark("hfhy_jizhi") < 9;
+                if (event.card.name != "sha" || player.countMark("hfhy_jizhi") >= 9) return false;
+                // 成为【杀】的目标；自己使用的【杀】已由 useCard 计数，避免多目标重复加标
+                if (event.name == "useCardToTargeted") {
+                    return event.target == player && event.player != player;
+                }
+                return true;
             },
             content() {
                 player.addMark("hfhy_jizhi", 1, false);
@@ -3426,11 +3433,12 @@ groupSkill: "qun",
             skillAnimation: true,
             animationColor: "gray",
             async content(event, trigger, player) {
-                if (player.countMark("hfhy_jizhi") > 0) {
-                    await player.gainMaxHp();
-                }
+                const markCount = player.countMark("hfhy_jizhi");
                 player.changeGroup("wei");
                 player.clearMark("hfhy_jizhi");
+                if (markCount > 0) {
+                    await player.draw(markCount);
+                }
                 player.awakenSkill("hfhy_jizhi");
                 await player.recover();
                 await player.addSkills(["hfhy_jueji", "hfhy_kunfen"]);
@@ -3471,14 +3479,14 @@ groupSkill: "qun",
     enable: "phaseUse",
     filter(event, player) {
         if (player.group != "shu") return false;
-        const card = { name: "sha", isCard: true };
+        const card = { name: "sha", nature: "fire", isCard: true };
         return game.hasPlayer(target => player.canUse(card, target, false) && player.inRange(target));
     },
     mark: true,
     marktext: "九伐",
     intro: {
         content(storage, player) {
-            return `已获得${storage || 0}个"九伐"标记，达到9个势力变为魏`;
+            return `已获得${storage || 0}个"九伐"标记，达到9个势力变为魏并获得〖绝计〗〖困奋〗`;
         },
     },
     init(player, skill) {
@@ -3496,14 +3504,14 @@ groupSkill: "qun",
         
         await player.draw();
         
-        const card = { name: "sha", isCard: true, _jiufa_sha: true };
+        const card = { name: "sha", nature: "fire", isCard: true, _jiufa_sha: true };
         const targets = game.filterPlayer(target => player.canUse(card, target, false) && player.inRange(target));
         if (targets.length) {
             const result = await player.chooseTarget(
-                "请选择【杀】的目标",
+                "请选择【火杀】的目标",
                 (card2, player2, target) => targets.includes(target)
             ).set("ai", target => {
-                return get.effect(target, { name: "sha" }, player, player);
+                return get.effect(target, { name: "sha", nature: "fire" }, player, player);
             }).forResult();
             if (result.bool && result.targets.length) {
                 await player.useCard(card, result.targets[0], false);
@@ -3512,6 +3520,7 @@ groupSkill: "qun",
         
         if (player.countMark("hfhy_jiufa") >= 9) {
             player.changeGroup("wei");
+            await player.addSkills(["hfhy_jueji", "hfhy_kunfen"]);
             player.changeSkin({ characterName: "ming_jiangwei" },"1_ming_jiangwei")
         }
     },
@@ -3550,10 +3559,10 @@ groupSkill: "qun",
             trigger: { player: "dying" },
             forced: true,
             filter(event, player) {
-                return player.countMark("hfhy_jiufa") <= 6;
+                return player.countMark("hfhy_jiufa") <= 7;
             },
             async content(event, trigger, player) {
-                for (let i = 0; i < 3; i++) {
+                for (let i = 0; i < 2; i++) {
                     player.addMark("hfhy_jiufa", 1, false);
                 }
                 await player.recover();
@@ -3572,7 +3581,7 @@ groupSkill: "qun",
                 // 本轮已发动过：每次额外失去1点体力，血量不健康或没有值得杀的敌人时停手
                 if (count > 0) {
                     if (player.hp <= 2) return 0;
-                    const card = { name: "sha", isCard: true };
+                    const card = { name: "sha", nature: "fire", isCard: true };
                     const hasEnemy = game.hasPlayer(cur =>
                         player.canUse(card, cur, false) &&
                         player.inRange(cur) &&
@@ -5497,7 +5506,7 @@ groupSkill: "qun",
             if (n >= 6) list.push("绝境");
             if (n >= 10) list.push("怀幼");
             if (n >= 14) list.push("破围");
-            return `拥有${n}个"胆"标记` + (list.length ? `，视为拥有【${list.join("】【")}】` : "");
+            return `拥有${n}个"胆"标记（上限14）` + (list.length ? `，视为拥有【${list.join("】【")}】` : "");
         },
     },
     init(player, skill) {
@@ -5520,7 +5529,9 @@ groupSkill: "qun",
     async content(event, trigger, player) {
         // popup:false 抑制自动弹窗/记录，但每次触发仍播一次龙胆系语音
         game.trySkillAudio("hfhy_gudan", player, true);
-        player.addMark("hfhy_gudan", 1, false);
+        if (player.countMark("hfhy_gudan") < 14) {
+            player.addMark("hfhy_gudan", 1, false);
+        }
         player.markSkill("hfhy_gudan");
         const n = player.countMark("hfhy_gudan");
         const toGain = [];
@@ -5530,7 +5541,26 @@ groupSkill: "qun",
         if (n >= 14 && !player.hasSkill("hfhy_powei", null, null, false)) toGain.push("hfhy_powei");
         if (toGain.length) {
             game.log(player, "获得了技能", "#g【" + toGain.map(name => get.translation(name)).join("】【") + "】");
-            await player.addSkills(toGain);
+            for (const skill of toGain) {
+                await player.addSkills([skill]);
+                const { control } = await player.chooseControl(["选项一", "选项二"])
+                    .set("choiceList", [
+                        "获得一点护甲",
+                        "摸两张牌",
+                    ])
+                    .set("prompt", `孤胆：因获得“${get.translation(skill)}”，选择一项`)
+                    .set("ai", () => {
+                        const me = get.player();
+                        // 护甲残血更划算，手牌缺口大或状态健康时补牌
+                        return me.hp <= 2 && me.hujia < 3 ? "选项一" : "选项二";
+                    })
+                    .forResult();
+                if (control == "选项一") {
+                    await player.changeHujia(1);
+                } else {
+                    await player.draw(2);
+                }
+            }
         }
     },
     derivation: ["hfhy_longdan", "hfhy_juejing", "hfhy_huaiyou", "hfhy_powei"],
@@ -5712,41 +5742,29 @@ groupSkill: "qun",
             .forResult();
         if (!result.bool || !result.cards?.length) return;
         const num = result.cards.length;
-        const { control } = await player.chooseControl(["选项一", "选项二", "选项三", "选项四"])
+        const { control } = await player.chooseControl(["选项一", "选项二"])
             .set("choiceList", [
-                "获得等量的【杀】",
-                "获得等量的【闪】",
-                "获得等量的黑色牌",
-                "获得等量的红色牌",
+                "从弃牌堆随机获得等量的基本牌",
+                "从弃牌堆随机获得等量的非基本牌",
             ])
             .set("prompt", `破围：获得${num}张牌`)
             .set("ai", () => {
                 const me = get.player();
-                const hasEnemy = game.hasPlayer(current => current != me && get.attitude(me, current) < 0 && current.isIn());
-                // 有敌人优先拿杀进攻；残血偏红（桃闪占比高）；否则按手牌缺啥补啥
-                if (hasEnemy && me.hp > 2) return "选项一";
-                if (hasEnemy && me.hp <= 2) return "选项四";
-                if (!hasEnemy) return "选项四";
-                return "选项二";
+                // 基本牌兜底实用；非基本牌看弃牌堆里有没有高质量锦囊/装备
+                const discardPile = Array.from(ui.discardPile.childNodes);
+                const basicValue = discardPile.filter(card => get.type(card, "basic") == "basic")
+                    .reduce((sum, card) => sum + get.value(card, me), 0);
+                const nonBasicValue = discardPile.filter(card => get.type(card, "basic") != "basic")
+                    .reduce((sum, card) => sum + get.value(card, me), 0);
+                return nonBasicValue > basicValue ? "选项二" : "选项一";
             })
             .forResult();
-        let filterFn;
-        if (control == "选项一") filterFn = card => card.name == "sha";
-        else if (control == "选项二") filterFn = card => card.name == "shan";
-        else if (control == "选项三") filterFn = card => get.color(card) == "black";
-        else filterFn = card => get.color(card) == "red";
-        // 从牌堆顶按顺序取，不足则从弃牌堆顶补
-        const gained = [];
-        for (const card of Array.from(ui.cardPile.childNodes)) {
-            if (gained.length >= num) break;
-            if (filterFn(card)) gained.push(card);
-        }
-        if (gained.length < num) {
-            for (const card of Array.from(ui.discardPile.childNodes)) {
-                if (gained.length >= num) break;
-                if (filterFn(card) && !gained.includes(card)) gained.push(card);
-            }
-        }
+        const wantBasic = control == "选项一";
+        const pool = Array.from(ui.discardPile.childNodes).filter(card =>
+            wantBasic ? get.type(card, "basic") == "basic" : get.type(card, "basic") != "basic"
+        );
+        // 从弃牌堆随机取 num 张（池子不足则有多少拿多少）
+        const gained = pool.sort(() => Math.random() - 0.5).slice(0, num);
         if (gained.length) {
             await player.gain(gained, "gain2");
             player.addGaintag(gained, "hfhy_powei_free");
