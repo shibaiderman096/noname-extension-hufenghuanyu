@@ -923,12 +923,20 @@ const skills = {
             },
             async cost(event, trigger, player) {
                 const gainedCards = trigger.cards;
+                // 归汉觉醒需要 3 张「资」，且「资」可当基本牌使用；回合外获得的牌优先存起来
+                const awakenPending = player.countExpansions("hfhy_jizi") < 3;
                 const result = await player
                     .chooseCard("h", [1, gainedCards.length], "是否将获得的牌置于武将牌上作为「资」？")
                     .set("filterCard", card => gainedCards.includes(card))
                     .set("ai", card => {
-                        // 「资」之后只能被消耗来视为使用基本牌，低价值牌存起来最划算；好牌留在手里
+                        // 「资」可当基本牌使用，且攒够3张可觉醒归汉；回合外获得的牌倾向存起来
                         const val = get.value(card);
+                        // 未觉醒且未攒够3张：只要不是关键牌（桃、无懈等）就存
+                        if (awakenPending) {
+                            if (val >= 8) return 0;
+                            return 8 - val;
+                        }
+                        // 已攒够/已觉醒：存下价值不高的牌，好牌留手
                         if (val >= 6) return 0;
                         return 6 - val;
                     })
