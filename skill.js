@@ -6940,6 +6940,18 @@ groupSkill: "qun",
         await player.loseMaxHp();
         await player.recover();
     },
+    ai: {
+        effect: {
+            target(card, player, target) {
+                // 仅影响“周泰对自己”使用回复/救命牌；队友救他不受影响
+                if (player != target) return;
+                if (!get.tag(card, "save") && !get.tag(card, "recover")) return;
+                // 濒死时（不屈已不足）允许自救；平时靠“不屈”扛，不浪费桃
+                if (target.isDying()) return;
+                return 0;
+            },
+        },
+    },
     skill_id: "hfhy_buqu",
     _priority: 0,
 },
@@ -6963,10 +6975,14 @@ groupSkill: "qun",
                     // 自保：体力不足承受伤害时无效化（不屈可兜底回血）
                     return me.hp <= 1;
                 }
-                if (get.attitude(me, target) <= 0 || eff <= 0) return false;
+                // 只保护队友：态度为正，且此【杀】确实对其不利（get.effect 从己方视角为负）
+                if (get.attitude(me, target) <= 0) return false;
+                const gain = -eff;
+                if (gain <= 0) return false;
+                // 体力越健康越愿意替队友挡刀；自己危险时要求更高收益
                 if (me.hp > 2) return true;
-                if (me.hp == 2) return eff >= 4;
-                return eff >= 6;
+                if (me.hp == 2) return gain >= 3;
+                return gain >= 6;
             })
             .forResult();
     },
