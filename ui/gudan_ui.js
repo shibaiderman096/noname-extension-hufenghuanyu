@@ -55,6 +55,15 @@ const FLAME_OUTER_GOLD = `url("data:image/svg+xml,${encodeURIComponent(
 const CSS = `
 .hfhy-gudan-ui{
     --hfhy-gudan-flame:${FLAME_ORANGE};
+    --hfhy-gudan-fire-ring:conic-gradient(from 0deg,
+        #ff5e00 0deg, #ffd875 12deg, #ff7a00 24deg, #ffb932 36deg,
+        #ff5e00 48deg, #ffe08a 60deg, #ff7800 72deg, #ffb42b 84deg,
+        #ff5e00 96deg, #ffd875 108deg, #ff7a00 120deg, #ffb932 132deg,
+        #ff5e00 144deg, #ffe08a 156deg, #ff7800 168deg, #ffb42b 180deg,
+        #ff5e00 192deg, #ffd875 204deg, #ff7a00 216deg, #ffb932 228deg,
+        #ff5e00 240deg, #ffe08a 252deg, #ff7800 264deg, #ffb42b 276deg,
+        #ff5e00 288deg, #ffd875 300deg, #ff7a00 312deg, #ffb932 324deg,
+        #ff5e00 336deg, #ffe08a 348deg, #ff5e00 360deg);
     position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-20px);
     transform:translateX(-50%);
     display:flex !important; flex-direction:row !important; align-items:center; justify-content:center;
@@ -68,6 +77,15 @@ const CSS = `
 .hfhy-gudan-ui.show{ opacity:1; }
 .hfhy-gudan-ui.complete{
     --hfhy-gudan-flame:${FLAME_GOLD};
+    --hfhy-gudan-fire-ring:conic-gradient(from 0deg,
+        #d99600 0deg, #fff1a8 12deg, #f5ba16 24deg, #fff5c9 36deg,
+        #e8a800 48deg, #fff0a0 60deg, #f4bd20 72deg, #fff8d5 84deg,
+        #d99600 96deg, #fff1a8 108deg, #f5ba16 120deg, #fff5c9 132deg,
+        #e8a800 144deg, #fff0a0 156deg, #f4bd20 168deg, #fff8d5 180deg,
+        #d99600 192deg, #fff1a8 204deg, #f5ba16 216deg, #fff5c9 228deg,
+        #e8a800 240deg, #fff0a0 252deg, #f4bd20 264deg, #fff8d5 276deg,
+        #d99600 288deg, #fff1a8 300deg, #f5ba16 312deg, #fff5c9 324deg,
+        #e8a800 336deg, #fff0a0 348deg, #d99600 360deg);
     background:rgba(46,34,0,.75);
     box-shadow:0 0 0 1px rgba(255,214,92,.8), 0 0 10px rgba(255,196,60,.55);
 }
@@ -107,21 +125,43 @@ const CSS = `
     box-shadow:0 0 0 1px rgba(0,0,0,.55), inset 0 0 2px rgba(0,0,0,.5);
     transition:background .3s, box-shadow .3s, transform .3s, color .3s;
 }
-/* 达到解锁数：橙色 + 静态火苗 */
+/* 达到解锁数：节点外侧形成一圈火焰，中心镂空，不遮挡技能首字 */
 .hfhy-gudan-node[data-state="unlocked"]{
+    isolation:isolate;
     background:radial-gradient(circle at 50% 72%, #ffe08a 0%, #ff9d2e 48%, #ff6a00 100%);
     color:#401f00; text-shadow:0 1px 0 rgba(255,235,190,.6);
     box-shadow:0 0 0 1px rgba(120,40,0,.6), 0 0 5px 1px rgba(255,140,0,.7), 0 0 10px 3px rgba(255,90,0,.3);
     transform:translate(-50%,-50%) scale(1.12);
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
-    content:""; position:absolute !important; left:50%; top:50%;
-    width:30px; height:38px;
-    transform:translate(-50%,-56%);
+    content:"";
+    position:absolute !important;
+    left:50% !important; top:50% !important; bottom:auto !important;
+    width:34px; height:34px;
+    transform:translate(-50%,-50%);
+    transform-origin:center;
     z-index:-1;
-    background-image:var(--hfhy-gudan-flame);
-    background-repeat:no-repeat; background-position:center bottom; background-size:contain;
-    filter:drop-shadow(0 0 2px rgba(255,150,0,.9)) drop-shadow(0 0 5px rgba(255,90,0,.5));
+    pointer-events:none;
+    background:var(--hfhy-gudan-fire-ring);
+    /* 外缘做成不规则火舌，中心挖空，让节点本身完整露出 */
+    clip-path:polygon(
+        50% 0%, 57% 13%, 68% 5%, 69% 19%, 84% 12%, 81% 28%,
+        97% 26%, 88% 40%, 100% 51%, 88% 58%, 95% 72%, 80% 72%,
+        83% 88%, 67% 82%, 60% 98%, 50% 86%, 39% 100%, 34% 84%,
+        18% 91%, 20% 75%, 5% 74%, 13% 60%, 0% 50%, 13% 42%,
+        5% 28%, 21% 28%, 17% 12%, 33% 19%, 41% 4%
+    );
+    -webkit-mask:radial-gradient(circle, transparent 0 49%, #000 56% 84%, transparent 98%);
+    mask:radial-gradient(circle, transparent 0 49%, #000 56% 84%, transparent 98%);
+    filter:drop-shadow(0 0 2px rgba(255,150,0,.95)) drop-shadow(0 0 4px rgba(255,90,0,.55));
+    animation:hfhy-gudan-fire-wrap 1.7s ease-in-out infinite;
+}
+.hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]::after{
+    filter:drop-shadow(0 0 2px rgba(255,220,100,.95)) drop-shadow(0 0 5px rgba(255,180,20,.7));
+}
+@keyframes hfhy-gudan-fire-wrap{
+    0%,100%{ transform:translate(-50%,-50%) rotate(-3deg) scale(.96); }
+    50%{ transform:translate(-50%,-50%) rotate(3deg) scale(1.06); }
 }
 /* 全部解锁：进度条与节点转金色 */
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]{
