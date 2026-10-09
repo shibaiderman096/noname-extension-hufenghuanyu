@@ -93,6 +93,18 @@ const CSS = `
 }
 .hfhy-guqu-fxsuit svg{ width:100%; height:100%; display:block; overflow:visible; }
 .hfhy-guqu-fxsuit .fill{ opacity:1; }
+/* 扇形下方的“弦歌合律”题字 */
+.hfhy-guqu-title{
+    left:0; top:56px; transform:translateX(-50%); white-space:nowrap;
+    font-size:24px; font-weight:bold; letter-spacing:6px; color:#eafff1;
+    text-shadow:0 0 8px rgba(80,220,140,.9), 0 0 16px rgba(40,160,90,.7), 0 2px 2px rgba(0,0,0,.7);
+    opacity:0;
+    animation:hfhy-guqu-title .8s ease-out .95s forwards, hfhy-guqu-fxout .7s ease-in 3.7s forwards;
+}
+.hfhy-guqu-title::after{
+    content:""; position:absolute; left:6%; right:6%; bottom:-5px; height:2px; border-radius:2px;
+    background:linear-gradient(90deg, transparent, #7ff0ae, transparent);
+}
 @keyframes hfhy-guqu-fxlife{ 0%,93%{opacity:1} 100%{opacity:0} }
 @keyframes hfhy-guqu-fan{
     0%{ transform:scale(.35) rotate(-26deg); opacity:0; }
@@ -107,6 +119,10 @@ const CSS = `
     100%{ transform:scale(1); opacity:1; }
 }
 @keyframes hfhy-guqu-fxout{ to{ transform:scale(.9); opacity:0; } }
+@keyframes hfhy-guqu-title{
+    0%{ transform:translateX(-50%) translateY(14px) scale(.9); opacity:0; }
+    100%{ transform:translateX(-50%) translateY(0) scale(1); opacity:1; }
+}
 `;
 
 /** 注入样式，以及共享的 <defs>（形状 + 镜像遮罩，用来画“空心”轮廓） */
@@ -156,6 +172,11 @@ function showAllHitFx(player) {
     const fan = document.createElement("div");
     fan.className = "hfhy-guqu-fan";
     fx.appendChild(fan);
+
+    const title = document.createElement("div");
+    title.className = "hfhy-guqu-title";
+    title.textContent = "弦歌合律";
+    fx.appendChild(title);
 
     const suits = ["spade", "heart", "club", "diamond"];
     // 花色沿 120° 扇形弧线分布：半径 120px，角度从 215° 到 325°（180° 是正右，270° 是正上）
