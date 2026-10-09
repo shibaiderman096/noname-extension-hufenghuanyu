@@ -115,9 +115,9 @@ const CSS = `
     transform:translate(-50%,-50%) scale(1.12);
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
-    content:""; position:absolute !important; left:50%; top:50%;
-    width:30px; height:38px;
-    transform:translate(-50%,-56%);
+    content:""; position:absolute !important; left:50%; bottom:calc(100% - 2px); top:auto !important;
+    width:16px; height:22px; margin-left:-8px;
+    transform:none;
     z-index:-1;
     background-image:var(--hfhy-gudan-flame);
     background-repeat:no-repeat; background-position:center bottom; background-size:contain;
