@@ -47,10 +47,10 @@ const FLAME_GOLD = FLAME_URL(
 const CSS = `
 .hfhy-gudan-ui{
     --hfhy-gudan-flame:${FLAME_ORANGE};
-    position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-15px);
+    position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-20px);
     transform:translateX(-50%);
     display:flex !important; flex-direction:row !important; align-items:center; justify-content:center;
-    padding:9px 9px 5px; border-radius:999px;
+    padding:5px 9px; border-radius:999px;
     background:rgba(0,0,0,.58);
     box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 1px 4px rgba(0,0,0,.6);
     pointer-events:none; z-index:20; white-space:nowrap;
@@ -107,8 +107,10 @@ const CSS = `
     transform:translate(-50%,-50%) scale(1.12);
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
-    content:""; position:absolute !important; left:50%; bottom:calc(100% - 4px); margin-left:-6px;
-    width:12px; height:14px;
+    content:""; position:absolute !important; left:50%; top:50%;
+    width:30px; height:38px;
+    transform:translate(-50%,-56%);
+    z-index:-1;
     background-image:var(--hfhy-gudan-flame);
     background-repeat:no-repeat; background-position:center bottom; background-size:contain;
     filter:drop-shadow(0 0 2px rgba(255,150,0,.9)) drop-shadow(0 0 5px rgba(255,90,0,.5));
