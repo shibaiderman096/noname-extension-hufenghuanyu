@@ -45,30 +45,6 @@ const FLAME_GOLD = FLAME_URL(
     `<stop offset="0" stop-color="#fff0b0"/><stop offset="1" stop-color="#ffffff"/>`
 );
 
-// 节点环绕火焰：水滴状小火舌沿节点圆周排列，尖端顺着圆弧切向延伸，
-// 整体像一圈小火环，不是放射状的太阳形。
-function flameRingUrl(outerStops) {
-    // 单条水滴火舌（朝上，根部中心在 (0,-8)），根部圆润、尖端稍收
-    const tongue = `M-3.2 -7.6C-4.2 -11.6 -2.4 -14.4 .4 -16.6C1.6 -17.5 2.2 -18.3 2.6 -19.1C3.1 -16.3 4.5 -13.4 3.5 -7.6C2.8 -6.7 -2.4 -6.7 -3.2 -7.6Z`;
-    const COUNT = 10;
-    const scales = [1, 0.86, 1.04, 0.9, 1.06, 0.88, 1.02, 0.94, 1.05, 0.9]; // 长短错落，避免死板
-    const tongues = Array.from({ length: COUNT }, (_, i) => {
-        const angle = (360 / COUNT) * i;
-        // 绕根部缩放：只改火舌长度，不改它贴着圆弧的位置
-        return `<path fill="url(#ringOuter)" transform="rotate(${angle}) translate(0 -8) scale(${scales[i]}) translate(0 8)" d="${tongue}"/>`;
-    }).join("");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 40 40"><defs>` +
-        `<linearGradient id="ringOuter" x1="0" y1="1" x2="0" y2="0">${outerStops}</linearGradient>` +
-        `</defs>${tongues}</svg>`;
-    return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-}
-const FLAME_RING_ORANGE = flameRingUrl(
-    `<stop offset="0" stop-color="#ff4a00"/><stop offset=".55" stop-color="#ff9d2e"/><stop offset="1" stop-color="#ffe08a"/>`
-);
-const FLAME_RING_GOLD = flameRingUrl(
-    `<stop offset="0" stop-color="#e8a800"/><stop offset=".55" stop-color="#ffd24a"/><stop offset="1" stop-color="#fff4c2"/>`
-);
-
 // 屏幕正中特效用的金色火焰：只保留外焰一层
 const FLAME_OUTER_GOLD = `url("data:image/svg+xml,${encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 30"><defs>` +
@@ -79,7 +55,6 @@ const FLAME_OUTER_GOLD = `url("data:image/svg+xml,${encodeURIComponent(
 const CSS = `
 .hfhy-gudan-ui{
     --hfhy-gudan-flame:${FLAME_ORANGE};
-    --hfhy-gudan-fire-ring:${FLAME_RING_ORANGE};
     position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-20px);
     transform:translateX(-50%);
     display:flex !important; flex-direction:row !important; align-items:center; justify-content:center;
@@ -93,7 +68,6 @@ const CSS = `
 .hfhy-gudan-ui.show{ opacity:1; }
 .hfhy-gudan-ui.complete{
     --hfhy-gudan-flame:${FLAME_GOLD};
-    --hfhy-gudan-fire-ring:${FLAME_RING_GOLD};
     background:rgba(46,34,0,.75);
     box-shadow:0 0 0 1px rgba(255,214,92,.8), 0 0 10px rgba(255,196,60,.55);
 }
@@ -141,25 +115,16 @@ const CSS = `
     transform:translate(-50%,-50%) scale(1.12);
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
-    content:""; position:absolute !important;
-    left:50% !important; top:50% !important; bottom:auto !important;
-    width:40px; height:40px;
-    transform:translate(-50%,-50%);
-    transform-origin:center;
+    content:""; position:absolute !important; left:50%; top:50%;
+    width:15px; height:20px;
+    transform:translate(-50%,-72%);
+    margin-left:-7.5px;
     pointer-events:none;
-    background:var(--hfhy-gudan-fire-ring);
+    background-image:var(--hfhy-gudan-flame);
     z-index:-1;
     background-repeat:no-repeat; background-position:center; background-size:contain;
-    /* 挖掉中心：火舌只露在节点圆周外侧一小圈，不盖住节点、技能首字和进度条 */
-    -webkit-mask:radial-gradient(circle closest-side, transparent 0 38%, #000 41% 86%, transparent 96%);
-    mask:radial-gradient(circle closest-side, transparent 0 38%, #000 41% 86%, transparent 96%);
+    /* 小水滴立在节点上沿，大部分在节点上方，底部轻微搭在节点上；不压进度条 */
     filter:drop-shadow(0 0 2px rgba(255,120,0,.9)) drop-shadow(0 0 4px rgba(255,80,0,.45));
-    /* 静态小火环，不旋转；保留轻微明暗呼吸 */
-    animation:hfhy-gudan-ringpulse 2.4s ease-in-out infinite;
-}
-@keyframes hfhy-gudan-ringpulse{
-    0%,100%{ filter:drop-shadow(0 0 2px rgba(255,120,0,.9)) drop-shadow(0 0 4px rgba(255,80,0,.45)); }
-    50%{ filter:drop-shadow(0 0 3px rgba(255,150,0,1)) drop-shadow(0 0 6px rgba(255,100,0,.55)); }
 }
 /* 全部解锁：进度条与节点转金色 */
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]{
