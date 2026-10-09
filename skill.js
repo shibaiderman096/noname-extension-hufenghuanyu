@@ -5832,9 +5832,41 @@ groupSkill: "qun",
         return player.countCards("he") > 0;
     },
     async content(event, trigger, player) {
-        const result = await player.chooseToDiscard("he", [1, player.countCards("he")], true, "破围：弃置任意张牌")
-            .set("ai", card => 5 - get.value(card))
-            .forResult();
+        let result;
+        if (player.isUnderControl()) {
+            // 玩家自行选择
+            result = await player.chooseToDiscard("he", [1, player.countCards("he")], true, "破围：弃置任意张牌")
+                .set("ai", card => 5 - get.value(card, player))
+                .forResult();
+        } else {
+            // AI：按弃牌堆期望收益固定弃牌方案，净收益不足则不发动
+            const discardPile = Array.from(ui.discardPile.childNodes);
+            const basics = discardPile.filter(card => get.type(card, "basic") == "basic");
+            const nonBasics = discardPile.filter(card => get.type(card, "basic") != "basic");
+            const avg = cards => cards.length
+                ? cards.reduce((sum, card) => sum + get.value(card, player), 0) / cards.length
+                : 0;
+            // 期望收益取基本/非基本两类里较好的一边
+            const gainAvg = Math.max(avg(basics), avg(nonBasics));
+            const sorted = player.getCards("he")
+                .slice()
+                .sort((a, b) => get.value(a, player) - get.value(b, player));
+            let cost = 0, bestNum = 0, bestNet = 0;
+            // 弃多了期望收益未必更好，封顶4张防止倾家荡产
+            const gainCap = Math.min(4, Math.max(basics.length, nonBasics.length));
+            for (let num = 1; num <= sorted.length; num++) {
+                cost += get.value(sorted[num - 1], player);
+                // 弃牌还能缓解手牌上限压力，收益按0.9折算留余地
+                const net = gainAvg * num * 0.9 - cost;
+                if (net > bestNet) {
+                    bestNet = net;
+                    bestNum = num;
+                }
+                if (num >= gainCap) break;
+            }
+            if (bestNum <= 0 || bestNet < 1.5) return;
+            result = { bool: true, cards: sorted.slice(0, bestNum) };
+        }
         if (!result.bool || !result.cards?.length) return;
         const num = result.cards.length;
         const { control } = await player.chooseControl(["选项一", "选项二"])
