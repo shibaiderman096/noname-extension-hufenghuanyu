@@ -5794,6 +5794,7 @@ groupSkill: "qun",
 },
 "hfhy_huaiyou": {
     audio: ["longdan_sha1.mp3", "longdan_sha2.mp3"],
+    forced: true,
     mod: {
         maxHandcard(player, num) {
             return Math.floor(player.countMark("hfhy_gudan") / 2);
