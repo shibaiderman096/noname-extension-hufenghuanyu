@@ -5811,8 +5811,8 @@ groupSkill: "qun",
             },
             async content(event, trigger, player) {
                 const x = Math.floor(player.countMark("hfhy_gudan") / 2);
-                // 削弱：额外摸牌数至多为5张
-                trigger.num += Math.min(x - 2, 5);
+                // 削弱：摸牌阶段总摸牌数至多为5张
+                trigger.num = Math.min(trigger.num + Math.max(0, x - 2), 5);
             },
             sub: true,
             sourceSkill: "hfhy_huaiyou",
