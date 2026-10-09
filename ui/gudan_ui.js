@@ -30,7 +30,7 @@ const CSS = `
     position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-20px);
     transform:translateX(-50%);
     display:flex !important; flex-direction:row !important; align-items:center; justify-content:center;
-    padding:3px 7px; border-radius:999px;
+    padding:7px 9px 5px; border-radius:999px;
     background:rgba(0,0,0,.58);
     box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 1px 4px rgba(0,0,0,.6);
     pointer-events:none; z-index:20; white-space:nowrap;
@@ -68,16 +68,20 @@ const CSS = `
 
 .hfhy-gudan-node{
     position:absolute !important; top:50%; margin:0 !important;
-    width:9px !important; height:9px !important;
+    display:flex !important; align-items:center !important; justify-content:center !important;
+    width:17px !important; height:17px !important;
     border-radius:50%;
     transform:translate(-50%,-50%);
-    background:#6f6f6f;
+    font-size:11px; line-height:1; font-weight:bold;
+    background:#6f6f6f; color:#d8d8d8;
+    text-shadow:0 1px 1px rgba(0,0,0,.55);
     box-shadow:0 0 0 1px rgba(0,0,0,.55), inset 0 0 2px rgba(0,0,0,.5);
-    transition:background .3s, box-shadow .3s, transform .3s;
+    transition:background .3s, box-shadow .3s, transform .3s, color .3s;
 }
 /* 达到解锁数：橙色 + 静态火苗 */
 .hfhy-gudan-node[data-state="unlocked"]{
     background:radial-gradient(circle at 50% 72%, #ffe08a 0%, #ff9d2e 48%, #ff6a00 100%);
+    color:#401f00; text-shadow:0 1px 0 rgba(255,235,190,.6);
     box-shadow:0 0 0 1px rgba(120,40,0,.65), 0 0 6px 2px rgba(255,140,0,.85), 0 0 12px 4px rgba(255,90,0,.45);
     transform:translate(-50%,-50%) scale(1.12);
 }
@@ -92,6 +96,7 @@ const CSS = `
 /* 全部解锁：进度条与节点转金色 */
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]{
     background:radial-gradient(circle at 50% 72%, #fff6c9 0%, #ffd24a 48%, #f0a500 100%);
+    color:#4a3200; text-shadow:0 1px 0 rgba(255,255,255,.6);
     box-shadow:0 0 0 1px rgba(120,80,0,.7), 0 0 6px 2px rgba(255,214,92,.95), 0 0 13px 5px rgba(255,196,60,.55);
 }
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]::after{
@@ -127,6 +132,8 @@ function build(player, c) {
         dot.dataset.state = "locked";
         dot.style.left = ((node.need / MAX) * 100).toFixed(2) + "%";
         dot.title = `${node.name}（${node.need}胆）`;
+        // 节点上显示技能首字
+        dot.textContent = node.name[0];
         track.appendChild(dot);
         return dot;
     });
