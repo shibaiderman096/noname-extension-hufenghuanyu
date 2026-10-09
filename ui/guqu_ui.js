@@ -15,7 +15,7 @@ const KEY = "_hfhyGuquUI";
 const STYLE_ID = "hfhy-guqu-ui-style";
 const DEFS_ID = "hfhy-guqu-ui-defs";
 const FINISH_SHOW_MS = 1600; // 验证完毕后，结果停留多久再收起
-const FX_SHOW_MS = 6000; // 全部命中特效停留时长
+const FX_SHOW_MS = 4500; // 全部命中特效停留时长
 
 // 四种花色的形状（24x24 视窗内，整体缩到 80% 留出描边空间）
 const SHAPES = {
@@ -69,13 +69,14 @@ const CSS = `
 .hfhy-guqu-fx > div{ position:absolute; pointer-events:none; }
 .hfhy-guqu-fan{
     left:-150px; top:-150px; width:300px !important; height:300px !important;
-    background:conic-gradient(from 180deg at 50% 100%, transparent 0deg, rgba(38,166,91,.15) 24deg, rgba(64,196,110,.55) 90deg, rgba(38,166,91,.15) 156deg, transparent 180deg);
+    /* 120° 扇形（210°→330°），半透明深绿底 */
+    background:conic-gradient(from 180deg at 50% 100%, transparent 0deg, rgba(10,80,42,.4) 30deg, rgba(16,110,58,.72) 90deg, rgba(10,80,42,.4) 150deg, transparent 180deg);
     border-radius:50%;
     -webkit-mask:radial-gradient(circle at 50% 100%, transparent 0 26%, #000 38% 96%, transparent 100%);
     mask:radial-gradient(circle at 50% 100%, transparent 0 26%, #000 38% 96%, transparent 100%);
     transform-origin:50% 100%;
     opacity:0;
-    animation:hfhy-guqu-fan 1.6s cubic-bezier(.25,.9,.3,1) .15s forwards, hfhy-guqu-fanfade 1s ease-in 4.2s forwards;
+    animation:hfhy-guqu-fan 1.4s cubic-bezier(.25,.9,.3,1) .15s forwards, hfhy-guqu-fanfade .9s ease-in 3.1s forwards;
 }
 .hfhy-guqu-fan::after{
     content:""; position:absolute; inset:0; border-radius:50%;
@@ -88,11 +89,11 @@ const CSS = `
     color:var(--c,#eee);
     filter:drop-shadow(0 0 4px var(--c,#eee)) drop-shadow(0 0 10px rgba(60,200,120,.6));
     opacity:0;
-    animation:hfhy-guqu-suit 1.1s cubic-bezier(.25,1.2,.35,1) var(--d,0s) forwards, hfhy-guqu-fxout .8s ease-in 5s forwards;
+    animation:hfhy-guqu-suit 1s cubic-bezier(.25,1.2,.35,1) var(--d,0s) forwards, hfhy-guqu-fxout .7s ease-in 3.7s forwards;
 }
 .hfhy-guqu-fxsuit svg{ width:100%; height:100%; display:block; overflow:visible; }
 .hfhy-guqu-fxsuit .fill{ opacity:1; }
-@keyframes hfhy-guqu-fxlife{ 0%,94%{opacity:1} 100%{opacity:0} }
+@keyframes hfhy-guqu-fxlife{ 0%,93%{opacity:1} 100%{opacity:0} }
 @keyframes hfhy-guqu-fan{
     0%{ transform:scale(.35) rotate(-26deg); opacity:0; }
     50%{ opacity:.9; }
@@ -157,17 +158,17 @@ function showAllHitFx(player) {
     fx.appendChild(fan);
 
     const suits = ["spade", "heart", "club", "diamond"];
-    // 花色沿扇形弧线分布：半径 120px，角度从 205° 到 335°（180° 是正右，270° 是正上）
+    // 花色沿 120° 扇形弧线分布：半径 120px，角度从 215° 到 325°（180° 是正右，270° 是正上）
     const suitColors = { spade: "#e8e8e8", heart: "#ff5a5a", club: "#9ad48a", diamond: "#ff5a5a" };
     suits.forEach((suit, i) => {
-        const angle = 205 + i * 43;
+        const angle = 215 + i * 36.67;
         const rad = angle * Math.PI / 180;
         const x = 120 * Math.cos(rad);
         const y = 120 * Math.sin(rad);
         const el = document.createElement("div");
         el.className = "hfhy-guqu-fxsuit";
         el.style.setProperty("--c", suitColors[suit]);
-        el.style.setProperty("--d", 0.7 + i * 0.28 + "s");
+        el.style.setProperty("--d", 0.55 + i * 0.22 + "s");
         el.style.transform = `translate(${x}px, ${y}px)`;
         el.style.left = x + "px";
         el.style.top = y + "px";
