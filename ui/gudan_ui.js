@@ -116,14 +116,13 @@ const CSS = `
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
     content:""; position:absolute !important; left:50%; top:50%;
-    width:15px; height:20px;
-    transform:translate(-50%,-72%);
-    margin-left:-7.5px;
+    width:19px; height:26px;
+    transform:translate(-50%,-54%);
     pointer-events:none;
     background-image:var(--hfhy-gudan-flame);
     z-index:-1;
     background-repeat:no-repeat; background-position:center; background-size:contain;
-    /* 小水滴立在节点上沿，大部分在节点上方，底部轻微搭在节点上；不压进度条 */
+    /* 火焰轮廓与节点圆重合，节点盖住火焰下半部，上端露出一截火苗头 */
     filter:drop-shadow(0 0 2px rgba(255,120,0,.9)) drop-shadow(0 0 4px rgba(255,80,0,.45));
 }
 /* 全部解锁：进度条与节点转金色 */
