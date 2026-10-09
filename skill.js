@@ -5807,12 +5807,12 @@ groupSkill: "qun",
             trigger: { player: "phaseDrawBegin1" },
             filter(event, player) {
                 const x = Math.floor(player.countMark("hfhy_gudan") / 2);
-                return x > 2 && !event.numFixed;
+                return x > 4 && !event.numFixed;
             },
             async content(event, trigger, player) {
                 const x = Math.floor(player.countMark("hfhy_gudan") / 2);
-                // 削弱：摸牌阶段总摸牌数至多为5张
-                trigger.num = Math.min(trigger.num + Math.max(0, x - 2), 5);
+                // 削弱：多摸X-4张
+                trigger.num += Math.max(0, x - 4);
             },
             sub: true,
             sourceSkill: "hfhy_huaiyou",

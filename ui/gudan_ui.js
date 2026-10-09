@@ -115,12 +115,18 @@ const CSS = `
     transform:translate(-50%,-50%) scale(1.12);
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
-    content:""; position:absolute !important; left:50%; bottom:calc(100% - 5px); top:auto !important;
-    width:20px; height:24px; margin-left:-10px;
-    transform:none;
+    content:""; position:absolute !important;
+    left:50% !important; top:50% !important; bottom:auto !important;
+    width:20px; height:20px;
+    transform:translate(-50%,-50%);
+    transform-origin:center;
+    pointer-events:none;
+    background:var(--hfhy-gudan-flame);
     z-index:-1;
-    background-image:var(--hfhy-gudan-flame);
-    background-repeat:no-repeat; background-position:center bottom; background-size:contain;
+    background-repeat:no-repeat; background-position:center; background-size:contain;
+    /* 中心镂空，火焰只露出节点外圈，技能首字不被遮挡 */
+    -webkit-mask:radial-gradient(circle, transparent 0 45%, #000 55% 92%, transparent 100%);
+    mask:radial-gradient(circle, transparent 0 45%, #000 55% 92%, transparent 100%);
     filter:drop-shadow(0 0 2px rgba(255,150,0,.9)) drop-shadow(0 0 5px rgba(255,90,0,.5));
 }
 /* 全部解锁：进度条与节点转金色 */
