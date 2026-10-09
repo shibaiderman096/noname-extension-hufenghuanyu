@@ -5,6 +5,7 @@
  *  - 读取 player.countMark("hfhy_gudan")，在武将牌上沿画一条进度条
  *  - 每个待解锁技能是一个节点（2 龙胆 / 6 绝境 / 10 怀幼 / 14 破围）
  *  - 未解锁 = 灰色圆点；达到解锁数 = 橙色 + 静态火苗；14 枚全部解锁 = 进度条转金色
+ *  - 胆标记从低于 14 枚升到 14 枚的那一刻，在屏幕正中触发一次“一身是胆”特效（金焰 + 冲击环 + 称号），与游戏自带觉醒动画同处
  *  - 通过“包装” player.markSkill 刷新：孤胆每次加标记后都会 markSkill("hfhy_gudan")
  *
  * 不会做的事：不改 skill.js，不触发/拦截任何事件，不写入 storage。
@@ -43,6 +44,13 @@ const FLAME_GOLD = FLAME_URL(
     `<stop offset="0" stop-color="#e8a800"/><stop offset=".55" stop-color="#ffd24a"/><stop offset="1" stop-color="#fff4c2"/>`,
     `<stop offset="0" stop-color="#fff0b0"/><stop offset="1" stop-color="#ffffff"/>`
 );
+
+// 屏幕正中特效用的金色火焰：只保留外焰一层
+const FLAME_OUTER_GOLD = `url("data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 30"><defs>` +
+    `<linearGradient id="fo" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#e8a800"/><stop offset=".55" stop-color="#ffd24a"/><stop offset="1" stop-color="#fff4c2"/></linearGradient>` +
+    `</defs><path fill="url(#fo)" d="${FLAME_BODY}"/></svg>`
+)}")`;
 
 const CSS = `
 .hfhy-gudan-ui{
@@ -121,6 +129,56 @@ const CSS = `
     color:#4a3200; text-shadow:0 1px 0 rgba(255,255,255,.6);
     box-shadow:0 0 0 1px rgba(120,80,0,.7), 0 0 5px 1px rgba(255,214,92,.85), 0 0 11px 3px rgba(255,196,60,.45);
 }
+
+/* 14 枚达成：进度条金光一闪 */
+.hfhy-gudan-ui.surge{ animation:hfhy-gudan-surge 1s ease-out; }
+
+/* 屏幕正中的“一身是胆”特效（与游戏自带觉醒动画同处）。--hfhy-gudan-fx-y 可调垂直位置 */
+.hfhy-gudan-fx{
+    position:absolute !important; left:50%; top:var(--hfhy-gudan-fx-y,50%); width:0; height:0;
+    pointer-events:none; z-index:50;
+    animation:hfhy-gudan-fxlife 3.2s linear forwards;
+}
+.hfhy-gudan-fx > div{ position:absolute !important; pointer-events:none; }
+.hfhy-gudan-shock{
+    left:-60px; top:-60px; width:120px !important; height:120px !important; border-radius:50%;
+    border:3px solid #ffd24a; box-shadow:0 0 14px #ffc83c, inset 0 0 14px #ffc83c;
+    opacity:0; animation:hfhy-gudan-shock 1.1s ease-out forwards;
+}
+.hfhy-gudan-bigflame{
+    bottom:-30px; background-image:${FLAME_OUTER_GOLD}; background-repeat:no-repeat;
+    background-position:center bottom; background-size:contain;
+    transform-origin:50% 100%; opacity:0;
+    filter:drop-shadow(0 0 8px #ffc83c) drop-shadow(0 0 18px #ff9d2e);
+    animation:hfhy-gudan-grow .8s cubic-bezier(.2,1.2,.4,1) var(--d,0s) forwards, hfhy-gudan-flicker .6s ease-in-out calc(var(--d,0s) + .8s) infinite;
+}
+.hfhy-gudan-ember{
+    left:var(--ex); top:0; width:5px !important; height:5px !important; border-radius:50%;
+    background:var(--ec); box-shadow:0 0 6px 2px var(--ec); opacity:0;
+    animation:hfhy-gudan-ember var(--et) ease-out var(--ed) forwards;
+}
+.hfhy-gudan-title{
+    left:0; top:42px; transform:translateX(-50%); white-space:nowrap;
+    font-size:28px; font-weight:bold; letter-spacing:8px; color:#fff6d0;
+    text-shadow:0 0 8px #ffc83c, 0 0 18px #ff9d2e, 0 2px 2px rgba(0,0,0,.7);
+    opacity:0; animation:hfhy-gudan-title .7s ease-out .55s forwards;
+}
+.hfhy-gudan-title::after{
+    content:""; position:absolute; left:0; right:0; bottom:-6px; height:3px; border-radius:3px;
+    background:linear-gradient(90deg,#ffb81f,#fff4c2,#ffb81f);
+}
+@keyframes hfhy-gudan-surge{ 0%{filter:brightness(2.2)} 100%{filter:none} }
+@keyframes hfhy-gudan-flicker{
+    0%,100%{ transform:scale(1,1) rotate(0deg); }
+    25%{ transform:scale(.92,1.1) rotate(-2.5deg); }
+    50%{ transform:scale(1.07,.93) rotate(0deg); }
+    75%{ transform:scale(.95,1.06) rotate(2.5deg); }
+}
+@keyframes hfhy-gudan-grow{ 0%{opacity:0;transform:scale(.1,.05)} 60%{opacity:1;transform:scale(1.15,1.25)} 100%{opacity:1;transform:scale(1,1)} }
+@keyframes hfhy-gudan-shock{ 0%{opacity:.95;transform:scale(.3)} 100%{opacity:0;transform:scale(5.5)} }
+@keyframes hfhy-gudan-ember{ 0%{opacity:0;transform:translateY(20px)} 15%{opacity:1} 100%{opacity:0;transform:translateY(-150px) translateX(var(--ex2))} }
+@keyframes hfhy-gudan-title{ 0%{opacity:0;transform:translateX(-50%) scale(.5)} 60%{opacity:1;transform:translateX(-50%) scale(1.15)} 100%{opacity:1;transform:translateX(-50%) scale(1)} }
+@keyframes hfhy-gudan-fxlife{ 0%,82%{opacity:1} 100%{opacity:0} }
 `;
 
 function ensureStyle() {
@@ -182,6 +240,53 @@ function destroy(player) {
     }
 }
 
+/** 胆满 14 枚：屏幕正中升起金焰，与游戏自带的觉醒动画同处 */
+function playFull(player, c) {
+    c.el.classList.add("surge");
+    setTimeout(() => c.el.classList.remove("surge"), 1000);
+
+    const fx = document.createElement("div");
+    fx.className = "hfhy-gudan-fx";
+
+    [0, 0.18].forEach(delay => {
+        const ring = document.createElement("div");
+        ring.className = "hfhy-gudan-shock";
+        ring.style.animationDelay = delay + "s";
+        fx.appendChild(ring);
+    });
+
+    // 三团金焰：中央最大，两侧略小
+    [[0, 1.5, 0.1], [-70, 1, 0.25], [70, 1, 0.37]].forEach(([x, scale, delay]) => {
+        const f = document.createElement("div");
+        f.className = "hfhy-gudan-bigflame";
+        f.style.width = 90 * scale + "px";
+        f.style.height = 117 * scale + "px";
+        f.style.left = `calc(${x}px - ${45 * scale}px)`;
+        f.style.setProperty("--d", delay + "s");
+        fx.appendChild(f);
+    });
+
+    const emberColors = ["#fff4c2", "#ffd24a", "#ffb81f"];
+    for (let i = 0; i < 12; i++) {
+        const e = document.createElement("div");
+        e.className = "hfhy-gudan-ember";
+        e.style.setProperty("--ex", ((i * 37) % 140) - 70 + "px");
+        e.style.setProperty("--ex2", (((i * 53) % 40) - 20) + "px");
+        e.style.setProperty("--ec", emberColors[i % emberColors.length]);
+        e.style.setProperty("--et", 1.4 + (i % 4) * 0.25 + "s");
+        e.style.setProperty("--ed", 0.4 + (i % 5) * 0.2 + "s");
+        fx.appendChild(e);
+    }
+
+    const title = document.createElement("div");
+    title.className = "hfhy-gudan-title";
+    title.textContent = "一身是胆";
+    fx.appendChild(title);
+
+    (ui.window || ui.arena || document.body).appendChild(fx);
+    setTimeout(() => fx.remove(), 3300);
+}
+
 /** 根据标记数同步 UI（只读） */
 function sync(player) {
     if (!player || !player.node) return;
@@ -195,7 +300,10 @@ function sync(player) {
         c = player[KEY] = { el: null, fill: null, nodes: [] };
         build(player, c);
     }
+    const prev = c.prevMarks; // 首次建 UI 时为 undefined（如读档），不触发特效
     paint(c, marks);
+    if (typeof prev === "number" && prev < MAX && marks >= MAX) playFull(player, c);
+    c.prevMarks = marks;
 }
 
 function wrap(target, name, after) {

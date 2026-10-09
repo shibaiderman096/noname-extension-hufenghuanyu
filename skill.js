@@ -704,9 +704,22 @@ const skills = {
             return player.countCards("he") > 0;
         },
         async cost(event, trigger, player) {
+            // AI：卖血收益 = 补到体力上限的牌 + 补不足2张时的势标记；不划算就不弃
+            let goon = true;
+            if (!player.isUnderControl()) {
+                const refill = Math.max(0, player.maxHp - player.countCards("h") + 1); // 弃1张后可补的张数
+                const sorted = player.getCards("he").slice().sort((a, b) => get.value(a, player) - get.value(b, player));
+                const cost = sorted.length ? get.value(sorted[0], player) : 5;
+                goon = refill * 4 + (refill < 2 ? 3.5 : 0) > cost;
+            }
             const result = await player.chooseToDiscard("he", 1)
                 .set("prompt", "是否弃置一张牌，将手牌摸至体力上限？若以此法获得的牌数小于2，你获得1枚【势】标记")
-                .set("ai", card => 5 - get.value(card))
+                .set("goon", goon)
+                .set("ai", card => {
+                    if (!get.event().goon) return 0;
+                    // 弃最不值钱的牌
+                    return 5 - get.value(card);
+                })
                 .forResult();
             event.result = { bool: result?.bool };
         },
@@ -719,6 +732,20 @@ const skills = {
                 player.storage["hfhy_choufa"]++;
                 player.markSkill("hfhy_choufa");
             }
+        },
+        ai: {
+            maixie: true,
+            maixie_hp: true,
+            effect: {
+                target(card, player, target) {
+                    if (player.hasSkillTag("jueqing", false, target)) return [1, -1];
+                    if (get.tag(card, "damage")) {
+                        // 手牌缺口越大，受伤收益越高（镇骨补牌 + 筹伐势标记）→ 主动卖血
+                        const deficit = target.maxHp - target.countCards("h");
+                        return [1, deficit >= 2 ? 0.35 : 0.6];
+                    }
+                },
+            },
         },
         "skill_id": "hfhy_zhengu",
         "_priority": 0,
