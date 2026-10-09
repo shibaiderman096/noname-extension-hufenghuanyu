@@ -25,12 +25,32 @@ const NODES = [
     { name: "破围", need: 14 },
 ];
 
+// 火焰图形（外焰 + 内焰，双层渐变），替代原先的 CSS 水滴形
+const FLAME_BODY = `M12 1c.5 4.8 4 6.9 6.1 9.8C19.7 12.9 21 15 21 17.3c0 4.9-4 8.9-9 8.9s-9-4-9-8.9c0-2.4 1.2-4.3 2.6-6.4C7.9 8 11.5 5.8 12 1z`;
+const FLAME_CORE = `M12 10.5c.3 2.6 2.3 3.7 3.5 5.3.6 1 1.2 2 1.2 3.2 0 2.6-2.1 4.7-4.7 4.7s-4.7-2.1-4.7-4.7c0-1.2.6-2.3 1.3-3.3C9.8 14.2 11.7 13.1 12 10.5z`;
+function flameSvg(outer, core) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 30"><defs>` +
+        `<linearGradient id="fo" x1="0" y1="1" x2="0" y2="0">${outer}</linearGradient>` +
+        `<linearGradient id="fi" x1="0" y1="1" x2="0" y2="0">${core}</linearGradient>` +
+        `</defs><path fill="url(#fo)" d="${FLAME_BODY}"/><path fill="url(#fi)" d="${FLAME_CORE}"/></svg>`;
+}
+const FLAME_URL = (outer, core) => `url("data:image/svg+xml,${encodeURIComponent(flameSvg(outer, core))}")`;
+const FLAME_ORANGE = FLAME_URL(
+    `<stop offset="0" stop-color="#ff5e00"/><stop offset=".55" stop-color="#ff9d2e"/><stop offset="1" stop-color="#ffdc7a"/>`,
+    `<stop offset="0" stop-color="#ffd76a"/><stop offset="1" stop-color="#fff6d0"/>`
+);
+const FLAME_GOLD = FLAME_URL(
+    `<stop offset="0" stop-color="#e8a800"/><stop offset=".55" stop-color="#ffd24a"/><stop offset="1" stop-color="#fff4c2"/>`,
+    `<stop offset="0" stop-color="#fff0b0"/><stop offset="1" stop-color="#ffffff"/>`
+);
+
 const CSS = `
 .hfhy-gudan-ui{
-    position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-20px);
+    --hfhy-gudan-flame:${FLAME_ORANGE};
+    position:absolute !important; left:50%; top:var(--hfhy-gudan-top,-15px);
     transform:translateX(-50%);
     display:flex !important; flex-direction:row !important; align-items:center; justify-content:center;
-    padding:7px 9px 5px; border-radius:999px;
+    padding:9px 9px 5px; border-radius:999px;
     background:rgba(0,0,0,.58);
     box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 1px 4px rgba(0,0,0,.6);
     pointer-events:none; z-index:20; white-space:nowrap;
@@ -39,6 +59,7 @@ const CSS = `
 }
 .hfhy-gudan-ui.show{ opacity:1; }
 .hfhy-gudan-ui.complete{
+    --hfhy-gudan-flame:${FLAME_GOLD};
     background:rgba(46,34,0,.75);
     box-shadow:0 0 0 1px rgba(255,214,92,.8), 0 0 10px rgba(255,196,60,.55);
 }
@@ -82,26 +103,21 @@ const CSS = `
 .hfhy-gudan-node[data-state="unlocked"]{
     background:radial-gradient(circle at 50% 72%, #ffe08a 0%, #ff9d2e 48%, #ff6a00 100%);
     color:#401f00; text-shadow:0 1px 0 rgba(255,235,190,.6);
-    box-shadow:0 0 0 1px rgba(120,40,0,.65), 0 0 6px 2px rgba(255,140,0,.85), 0 0 12px 4px rgba(255,90,0,.45);
+    box-shadow:0 0 0 1px rgba(120,40,0,.6), 0 0 5px 1px rgba(255,140,0,.7), 0 0 10px 3px rgba(255,90,0,.3);
     transform:translate(-50%,-50%) scale(1.12);
 }
 .hfhy-gudan-node[data-state="unlocked"]::after{
-    content:""; position:absolute !important; left:50%; top:-8px; margin-left:-3.5px;
-    width:7px; height:9px;
-    background:linear-gradient(to top,#ff6a00,#ffd76a);
-    border-radius:50% 50% 50% 0;
-    transform:rotate(-45deg);
-    box-shadow:0 0 5px rgba(255,150,0,.9);
+    content:""; position:absolute !important; left:50%; bottom:calc(100% - 4px); margin-left:-6px;
+    width:12px; height:14px;
+    background-image:var(--hfhy-gudan-flame);
+    background-repeat:no-repeat; background-position:center bottom; background-size:contain;
+    filter:drop-shadow(0 0 2px rgba(255,150,0,.9)) drop-shadow(0 0 5px rgba(255,90,0,.5));
 }
 /* 全部解锁：进度条与节点转金色 */
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]{
     background:radial-gradient(circle at 50% 72%, #fff6c9 0%, #ffd24a 48%, #f0a500 100%);
     color:#4a3200; text-shadow:0 1px 0 rgba(255,255,255,.6);
-    box-shadow:0 0 0 1px rgba(120,80,0,.7), 0 0 6px 2px rgba(255,214,92,.95), 0 0 13px 5px rgba(255,196,60,.55);
-}
-.hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]::after{
-    background:linear-gradient(to top,#f0a500,#fff6c9);
-    box-shadow:0 0 6px rgba(255,214,92,.95);
+    box-shadow:0 0 0 1px rgba(120,80,0,.7), 0 0 5px 1px rgba(255,214,92,.85), 0 0 11px 3px rgba(255,196,60,.45);
 }
 `;
 
