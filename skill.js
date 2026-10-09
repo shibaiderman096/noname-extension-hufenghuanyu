@@ -6781,7 +6781,8 @@ groupSkill: "qun",
                 .forResult();
             if (result.bool && result.links?.length) {
                 const link = result.links[0];
-                const card = get.autoViewAs({ name: link[2], nature: link[3], isCard: true });
+                // 无实体牌的虚拟牌：第二参传空数组，避免 cards 为 undefined 被当作实体牌处理
+                const card = get.autoViewAs({ name: link[2], nature: link[3], isCard: true }, []);
                 if (link[2] == "sha") {
                     const targets = await player.chooseTarget(true, "神速：选择【杀】的目标", (card2, player2, target) => player2.canUse({ name: "sha", nature: link[3], isCard: true }, target))
                         .set("ai", target => get.effect(target, { name: "sha", nature: link[3], isCard: true }, get.player(), get.player()))
