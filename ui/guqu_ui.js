@@ -15,6 +15,7 @@ const KEY = "_hfhyGuquUI";
 const STYLE_ID = "hfhy-guqu-ui-style";
 const DEFS_ID = "hfhy-guqu-ui-defs";
 const FINISH_SHOW_MS = 1600; // 验证完毕后，结果停留多久再收起
+const FX_SHOW_MS = 3200; // 全部命中特效停留时长
 
 // 四种花色的形状（24x24 视窗内，整体缩到 80% 留出描边空间）
 const SHAPES = {
@@ -59,6 +60,51 @@ const CSS = `
 
 @keyframes hfhy-guqu-pop{ 0%{transform:scale(.2)} 60%{transform:scale(1.35)} 100%{transform:scale(1)} }
 @keyframes hfhy-guqu-pulse{ 50%{ opacity:.55; } }
+/* ---- 全部命中：屏幕正中的绿色扇形 + 四花色 ---- */
+.hfhy-guqu-fx{
+    position:absolute; left:50%; top:var(--hfhy-guqu-fx-y,50%); width:0; height:0;
+    pointer-events:none; z-index:50;
+    animation:hfhy-guqu-fxlife ${FX_SHOW_MS}ms linear forwards;
+}
+.hfhy-guqu-fx > div{ position:absolute; pointer-events:none; }
+.hfhy-guqu-fan{
+    left:-110px; top:-110px; width:220px !important; height:220px !important;
+    background:conic-gradient(from 180deg at 50% 100%, transparent 0deg, rgba(38,166,91,.15) 24deg, rgba(64,196,110,.55) 90deg, rgba(38,166,91,.15) 156deg, transparent 180deg);
+    border-radius:50%;
+    -webkit-mask:radial-gradient(circle at 50% 100%, transparent 0 26%, #000 38% 96%, transparent 100%);
+    mask:radial-gradient(circle at 50% 100%, transparent 0 26%, #000 38% 96%, transparent 100%);
+    transform-origin:50% 100%;
+    opacity:0;
+    animation:hfhy-guqu-fan .9s cubic-bezier(.2,1.2,.4,1) .1s forwards, hfhy-guqu-fanfade .7s ease-in 2.1s forwards;
+}
+.hfhy-guqu-fan::after{
+    content:""; position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 180deg at 50% 100%, transparent 0deg, rgba(212,255,224,.5) 60deg, rgba(212,255,224,.9) 90deg, rgba(212,255,224,.5) 120deg, transparent 180deg);
+    -webkit-mask:radial-gradient(circle at 50% 100%, transparent 0 30%, #000 36% 40%, transparent 46%);
+    mask:radial-gradient(circle at 50% 100%, transparent 0 30%, #000 36% 40%, transparent 46%);
+}
+.hfhy-guqu-fxsuit{
+    left:0; top:0; width:34px !important; height:34px !important; margin:-17px 0 0 -17px;
+    color:var(--c,#eee);
+    filter:drop-shadow(0 0 4px var(--c,#eee)) drop-shadow(0 0 10px rgba(60,200,120,.6));
+    opacity:0;
+    animation:hfhy-guqu-suit .55s cubic-bezier(.2,1.4,.4,1) var(--d,0s) forwards, hfhy-guqu-fxout .5s ease-in 2.4s forwards;
+}
+.hfhy-guqu-fxsuit svg{ width:100%; height:100%; display:block; overflow:visible; }
+.hfhy-guqu-fxsuit .fill{ opacity:1; }
+@keyframes hfhy-guqu-fxlife{ 0%,92%{opacity:1} 100%{opacity:0} }
+@keyframes hfhy-guqu-fan{
+    0%{ transform:scale(.35) rotate(-26deg); opacity:0; }
+    55%{ opacity:1; }
+    100%{ transform:scale(1) rotate(0deg); opacity:1; }
+}
+@keyframes hfhy-guqu-fanfade{ to{ opacity:.15; } }
+@keyframes hfhy-guqu-suit{
+    0%{ transform:scale(.3); opacity:0; }
+    60%{ transform:scale(1.28); opacity:1; }
+    100%{ transform:scale(1); opacity:1; }
+}
+@keyframes hfhy-guqu-fxout{ to{ transform:scale(.9); opacity:0; } }
 `;
 
 /** 注入样式，以及共享的 <defs>（形状 + 镜像遮罩，用来画“空心”轮廓） */
@@ -93,6 +139,40 @@ function slotHTML(suit) {
         `<g mask="url(#hfhy-guqu-mask-${suit})"><use href="${ref}" xlink:href="${ref}" fill="currentColor" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></g>` +
         `<use class="fill" href="${ref}" xlink:href="${ref}" fill="currentColor"/>` +
         `</svg>`;
+}
+
+/** 全部命中：在屏幕正中播放一次“绿色扇形 + 四花色”特效（只读展示，不改技能） */
+function showAllHitFx(player) {
+    // 只创建一次，避免 markSkill 连续触发时叠加
+    if (document.querySelector(".hfhy-guqu-fx")) return;
+    const fx = document.createElement("div");
+    fx.className = "hfhy-guqu-fx";
+    // 与“一身是胆”特效同挂载点，确保屏幕正中
+    (ui.window || ui.arena || document.body).appendChild(fx);
+    setTimeout(() => fx.remove(), FX_SHOW_MS + 200);
+
+    const fan = document.createElement("div");
+    fan.className = "hfhy-guqu-fan";
+    fx.appendChild(fan);
+
+    const suits = ["spade", "heart", "club", "diamond"];
+    // 花色沿扇形弧线分布：半径 88px，角度从 205° 到 335°（180° 是正右，270° 是正上）
+    const suitColors = { spade: "#e8e8e8", heart: "#ff5a5a", club: "#9ad48a", diamond: "#ff5a5a" };
+    suits.forEach((suit, i) => {
+        const angle = 205 + i * 43;
+        const rad = angle * Math.PI / 180;
+        const x = 88 * Math.cos(rad);
+        const y = 88 * Math.sin(rad);
+        const el = document.createElement("div");
+        el.className = "hfhy-guqu-fxsuit";
+        el.style.setProperty("--c", suitColors[suit]);
+        el.style.setProperty("--d", 0.45 + i * 0.14 + "s");
+        el.style.transform = `translate(${x}px, ${y}px)`;
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+        el.innerHTML = slotHTML(suit);
+        fx.appendChild(el);
+    });
 }
 
 function build(player, c) {
@@ -172,6 +252,10 @@ function sync(player) {
     // 最后一格验证完：停留片刻再收起（技能那边随后会清空谱）
     if (pos >= pu.length && !c.finishing) {
         c.finishing = true;
+        // 全部命中：屏幕正中播放绿色扇形特效
+        if (c.results.length === pu.length && c.results.every(Boolean)) {
+            showAllHitFx(player);
+        }
         c.timer = setTimeout(() => {
             if (player[KEY] === c) destroy(player);
         }, FINISH_SHOW_MS);

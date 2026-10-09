@@ -45,34 +45,28 @@ const FLAME_GOLD = FLAME_URL(
     `<stop offset="0" stop-color="#fff0b0"/><stop offset="1" stop-color="#ffffff"/>`
 );
 
-// 节点环绕火焰：小火舌沿节点圆周切向排列，形成贴合圆弧的火环
-function flameRingUrl(outerStops, coreStops) {
-    // 圆润的小水滴火舌，尖端沿圆周切向，根部朝向节点中心
-    const drop = `M20 1C18.9 4.4 15.2 7.4 15.2 10.9C15.2 13.8 17.3 15.6 20 15.8C22.7 15.6 24.8 13.8 24.8 10.9C24.8 7.4 21.1 4.4 20 1Z`;
-    const core = `M20 6.1C19.3 8.4 17.6 10 17.6 11.7C17.6 13.2 18.6 14.2 20 14.3C21.4 14.2 22.4 13.2 22.4 11.7C22.4 10 20.7 8.4 20 6.1Z`;
-    const angles = [-90, -30, 30, 90, 150, 210];
-    const scales = [1, 0.94, 1.05, 0.96, 1.03, 0.95];
-    const drops = angles.map((angle, i) => {
-        const rad = angle * Math.PI / 180;
-        const x = (20 + 10.5 * Math.cos(rad)).toFixed(2);
-        const y = (20 + 10.5 * Math.sin(rad)).toFixed(2);
-        // rotate(angle+180)：火舌尖端沿圆周切向，根部贴向节点
-        return `<g transform="translate(${x} ${y}) rotate(${angle + 180}) scale(${scales[i]}) translate(-20 -9)">` +
-            `<path fill="url(#ringOuter)" d="${drop}"/><path fill="url(#ringCore)" d="${core}"/></g>`;
+// 节点环绕火焰：一圈火舌沿节点圆周排开，每条火舌根部贴着圆弧、尖端顺切向弯曲，
+// 整体像一轮火焰风车。单层外焰渐变（根部深、尖端浅），与屏幕正中特效风格一致。
+function flameRingUrl(outerStops) {
+    // 单条火舌（朝上，根部中心在 (0,-8)，尖端略向右倾）：左缘内凹、右缘外鼓
+    const tongue = `M-3.4 -7.5C-4.4 -11.8 -2.2 -14.6 .6 -16.9C1.5 -17.7 2 -18.4 2.4 -19.2C3 -16.2 4.6 -13.2 3.6 -7.5Z`;
+    const COUNT = 8;
+    const scales = [1, 0.88, 1.04, 0.9, 1, 0.94, 1.05, 0.88]; // 长短错落，避免死板
+    const tongues = Array.from({ length: COUNT }, (_, i) => {
+        const angle = (360 / COUNT) * i;
+        // 绕根部缩放：只改火舌长度，不改它贴着圆弧的位置
+        return `<path fill="url(#ringOuter)" transform="rotate(${angle}) translate(0 -8) scale(${scales[i]}) translate(0 8)" d="${tongue}"/>`;
     }).join("");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs>` +
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 40 40"><defs>` +
         `<linearGradient id="ringOuter" x1="0" y1="1" x2="0" y2="0">${outerStops}</linearGradient>` +
-        `<linearGradient id="ringCore" x1="0" y1="1" x2="0" y2="0">${coreStops}</linearGradient>` +
-        `</defs>${drops}</svg>`;
+        `</defs>${tongues}</svg>`;
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 const FLAME_RING_ORANGE = flameRingUrl(
-    `<stop offset="0" stop-color="#ff5e00"/><stop offset=".55" stop-color="#ff9d2e"/><stop offset="1" stop-color="#ffdc7a"/>`,
-    `<stop offset="0" stop-color="#ffd76a"/><stop offset="1" stop-color="#fff6d0"/>`
+    `<stop offset="0" stop-color="#ff4a00"/><stop offset=".55" stop-color="#ff9d2e"/><stop offset="1" stop-color="#ffe08a"/>`
 );
 const FLAME_RING_GOLD = flameRingUrl(
-    `<stop offset="0" stop-color="#e8a800"/><stop offset=".55" stop-color="#ffd24a"/><stop offset="1" stop-color="#fff4c2"/>`,
-    `<stop offset="0" stop-color="#fff0b0"/><stop offset="1" stop-color="#ffffff"/>`
+    `<stop offset="0" stop-color="#e8a800"/><stop offset=".55" stop-color="#ffd24a"/><stop offset="1" stop-color="#fff4c2"/>`
 );
 
 // 屏幕正中特效用的金色火焰：只保留外焰一层
@@ -149,17 +143,26 @@ const CSS = `
 .hfhy-gudan-node[data-state="unlocked"]::after{
     content:""; position:absolute !important;
     left:50% !important; top:50% !important; bottom:auto !important;
-    width:21px; height:21px;
+    width:40px; height:40px;
     transform:translate(-50%,-50%);
     transform-origin:center;
     pointer-events:none;
     background:var(--hfhy-gudan-fire-ring);
     z-index:-1;
     background-repeat:no-repeat; background-position:center; background-size:contain;
-    /* 环内径稍大于节点，火舌贴合圆弧且不侵入技能首字 */
-    -webkit-mask:radial-gradient(circle, transparent 0 46%, #000 54% 96%, transparent 100%);
-    mask:radial-gradient(circle, transparent 0 46%, #000 54% 96%, transparent 100%);
-    filter:drop-shadow(0 0 2px rgba(255,150,0,.9)) drop-shadow(0 0 5px rgba(255,90,0,.5));
+    /* 挖掉中心：火舌只出现在节点圆周外侧，不盖住节点和技能首字 */
+    -webkit-mask:radial-gradient(circle closest-side, transparent 0 40%, #000 43%);
+    mask:radial-gradient(circle closest-side, transparent 0 40%, #000 43%);
+    filter:drop-shadow(0 0 2px rgba(255,120,0,.9)) drop-shadow(0 0 4px rgba(255,80,0,.45));
+    /* 火焰风车缓慢旋转并微微起伏；不想要动画就删掉下面这一行 */
+    animation:hfhy-gudan-ringspin 6s linear infinite;
+}
+@keyframes hfhy-gudan-ringspin{
+    0%{ transform:translate(-50%,-50%) rotate(0deg) scale(1); }
+    25%{ transform:translate(-50%,-50%) rotate(90deg) scale(1.07); }
+    50%{ transform:translate(-50%,-50%) rotate(180deg) scale(.95); }
+    75%{ transform:translate(-50%,-50%) rotate(270deg) scale(1.06); }
+    100%{ transform:translate(-50%,-50%) rotate(360deg) scale(1); }
 }
 /* 全部解锁：进度条与节点转金色 */
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]{
