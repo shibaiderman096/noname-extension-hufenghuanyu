@@ -686,6 +686,6 @@ export default function(){
     author: "无名玩家",
     diskURL: "",
     forumURL: "",
-    version: "1.8.3",
+    version: "1.8.4",
 },files:{"character":[],"card":[],"skill":[],"audio":[]}} 
 };
