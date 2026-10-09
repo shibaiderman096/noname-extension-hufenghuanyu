@@ -5811,7 +5811,8 @@ groupSkill: "qun",
             },
             async content(event, trigger, player) {
                 const x = Math.floor(player.countMark("hfhy_gudan") / 2);
-                trigger.num += x - 2;
+                // 削弱：额外摸牌数至多为5张
+                trigger.num += Math.min(x - 2, 5);
             },
             sub: true,
             sourceSkill: "hfhy_huaiyou",
@@ -7037,7 +7038,8 @@ groupSkill: "qun",
                 if (!get.tag(card, "save") && !get.tag(card, "recover")) return;
                 // 濒死时（不屈已不足）允许自救；平时靠“不屈”扛，不浪费桃
                 if (target.isDying()) return;
-                return 0;
+                // 平时强烈贬低自救价值，优先把桃留给队友
+                return -1;
             },
         },
     },
@@ -7068,10 +7070,11 @@ groupSkill: "qun",
                 if (get.attitude(me, target) <= 0) return false;
                 const gain = -eff;
                 if (gain <= 0) return false;
-                // 体力越健康越愿意替队友挡刀；自己危险时要求更高收益
-                if (me.hp > 2) return true;
-                if (me.hp == 2) return gain >= 3;
-                return gain >= 6;
+                // 优先保护低血量队友；自己危险时要求目标更危险才挡
+                const targetDanger = Math.max(0, 3 - target.hp);
+                if (me.hp <= 1) return targetDanger >= 2 && gain >= 4;
+                if (me.hp == 2) return targetDanger >= 1 && gain >= 3;
+                return true;
             })
             .forResult();
     },
