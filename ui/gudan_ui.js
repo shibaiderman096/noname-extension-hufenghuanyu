@@ -45,13 +45,13 @@ const FLAME_GOLD = FLAME_URL(
     `<stop offset="0" stop-color="#fff0b0"/><stop offset="1" stop-color="#ffffff"/>`
 );
 
-// 节点环绕火焰：一圈火舌沿节点圆周排开，每条火舌根部贴着圆弧、尖端顺切向弯曲，
-// 整体像一轮火焰风车。单层外焰渐变（根部深、尖端浅），与屏幕正中特效风格一致。
+// 节点环绕火焰：水滴状小火舌沿节点圆周排列，尖端顺着圆弧切向延伸，
+// 整体像一圈小火环，不是放射状的太阳形。
 function flameRingUrl(outerStops) {
-    // 单条火舌（朝上，根部中心在 (0,-8)，尖端略向右倾）：左缘内凹、右缘外鼓
-    const tongue = `M-3.4 -7.5C-4.4 -11.8 -2.2 -14.6 .6 -16.9C1.5 -17.7 2 -18.4 2.4 -19.2C3 -16.2 4.6 -13.2 3.6 -7.5Z`;
-    const COUNT = 8;
-    const scales = [1, 0.88, 1.04, 0.9, 1, 0.94, 1.05, 0.88]; // 长短错落，避免死板
+    // 单条水滴火舌（朝上，根部中心在 (0,-8)），根部圆润、尖端稍收
+    const tongue = `M-3.2 -7.6C-4.2 -11.6 -2.4 -14.4 .4 -16.6C1.6 -17.5 2.2 -18.3 2.6 -19.1C3.1 -16.3 4.5 -13.4 3.5 -7.6C2.8 -6.7 -2.4 -6.7 -3.2 -7.6Z`;
+    const COUNT = 10;
+    const scales = [1, 0.86, 1.04, 0.9, 1.06, 0.88, 1.02, 0.94, 1.05, 0.9]; // 长短错落，避免死板
     const tongues = Array.from({ length: COUNT }, (_, i) => {
         const angle = (360 / COUNT) * i;
         // 绕根部缩放：只改火舌长度，不改它贴着圆弧的位置
@@ -150,19 +150,16 @@ const CSS = `
     background:var(--hfhy-gudan-fire-ring);
     z-index:-1;
     background-repeat:no-repeat; background-position:center; background-size:contain;
-    /* 挖掉中心：火舌只出现在节点圆周外侧，不盖住节点和技能首字 */
-    -webkit-mask:radial-gradient(circle closest-side, transparent 0 40%, #000 43%);
-    mask:radial-gradient(circle closest-side, transparent 0 40%, #000 43%);
+    /* 挖掉中心：火舌只露在节点圆周外侧一小圈，不盖住节点、技能首字和进度条 */
+    -webkit-mask:radial-gradient(circle closest-side, transparent 0 38%, #000 41% 86%, transparent 96%);
+    mask:radial-gradient(circle closest-side, transparent 0 38%, #000 41% 86%, transparent 96%);
     filter:drop-shadow(0 0 2px rgba(255,120,0,.9)) drop-shadow(0 0 4px rgba(255,80,0,.45));
-    /* 火焰风车缓慢旋转并微微起伏；不想要动画就删掉下面这一行 */
-    animation:hfhy-gudan-ringspin 6s linear infinite;
+    /* 静态小火环，不旋转；保留轻微明暗呼吸 */
+    animation:hfhy-gudan-ringpulse 2.4s ease-in-out infinite;
 }
-@keyframes hfhy-gudan-ringspin{
-    0%{ transform:translate(-50%,-50%) rotate(0deg) scale(1); }
-    25%{ transform:translate(-50%,-50%) rotate(90deg) scale(1.07); }
-    50%{ transform:translate(-50%,-50%) rotate(180deg) scale(.95); }
-    75%{ transform:translate(-50%,-50%) rotate(270deg) scale(1.06); }
-    100%{ transform:translate(-50%,-50%) rotate(360deg) scale(1); }
+@keyframes hfhy-gudan-ringpulse{
+    0%,100%{ filter:drop-shadow(0 0 2px rgba(255,120,0,.9)) drop-shadow(0 0 4px rgba(255,80,0,.45)); }
+    50%{ filter:drop-shadow(0 0 3px rgba(255,150,0,1)) drop-shadow(0 0 6px rgba(255,100,0,.55)); }
 }
 /* 全部解锁：进度条与节点转金色 */
 .hfhy-gudan-ui.complete .hfhy-gudan-node[data-state="unlocked"]{
